@@ -21,6 +21,16 @@ from PIL import Image
 
 load_dotenv()
 
+# On Streamlit Cloud, secrets live in st.secrets — inject into os.environ
+# so all os.getenv() calls work the same way locally and in the cloud.
+try:
+    import streamlit as st
+    for _k in ("GROQ_API_KEY", "HF_TOKEN", "HF_PWD"):
+        if _k in st.secrets and not os.environ.get(_k):
+            os.environ[_k] = str(st.secrets[_k])
+except Exception:
+    pass
+
 
 # ══════════════════════════════════════════════════════════════
 #  STAGE 1 — Modality-specific vision system prompts

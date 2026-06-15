@@ -3,3 +3,10 @@ venv/
 __pycache__/
 *.pyc
 .DS_Store
+
+# Streamlit secrets — set these in the Streamlit Cloud dashboard instead
+.streamlit/secrets.toml
+
+# Paper cache — regenerated at runtime
+.paper_cache.json
+.paper_cache_embeddings.npy
