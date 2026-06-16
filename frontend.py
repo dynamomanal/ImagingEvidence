@@ -1094,9 +1094,7 @@ if analyze_clicked and st.session_state.images:
                 f"### {modality} Report — {n} image{'s' if n > 1 else ''} · Groq Vision\n\n"
                 f"{synthesis}\n\n"
                 f"---\n"
-                f"*Sources: {n_papers} papers retrieved from PubMed · PubMed Central · Semantic Scholar*\n\n"
-                f"<details><summary>&#9658; Raw image descriptions (Stage 1)</summary>\n\n"
-                f"```\n{findings}\n```\n\n</details>"
+                f"*Sources: {n_papers} papers retrieved from PubMed · PubMed Central · Semantic Scholar*"
             ),
         })
 
