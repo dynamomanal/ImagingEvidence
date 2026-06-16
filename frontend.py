@@ -843,14 +843,6 @@ with st.sidebar:
 
     # ── analysis flow (Groq only) ──
     st.session_state["flow_selection"] = "Flow A - Groq Vision  (cloud · instant)"
-    _sb_label("Analysis engine")
-    st.markdown(
-        "<div style='background:#0B3D2E;border:1px solid #1A5C41;border-radius:6px;"
-        "padding:.45rem .75rem;font-size:.82rem;color:#34D399;font-weight:500;'>"
-        "&#9711; Groq Vision &nbsp;·&nbsp; cloud · instant</div>",
-        unsafe_allow_html=True,
-    )
-    st.caption("Groq Vision API — no local GPU needed. Supports all modalities.")
 
     st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
 
@@ -1024,6 +1016,20 @@ else:
                 st.markdown(f"*Sources: {_np} papers retrieved from PubMed · PubMed Central*")
             else:
                 st.markdown(msg["content"])
+
+    # After messages render, scroll so the latest message is visible
+    _components.html("""
+<script>
+(function() {
+    setTimeout(function() {
+        var msgs = window.parent.document.querySelectorAll('[data-testid="stChatMessage"]');
+        if (msgs.length > 0) {
+            msgs[msgs.length - 1].scrollIntoView({block: 'start'});
+        }
+    }, 120);
+})();
+</script>
+""", height=0)
 
 
 # ══════════════════════════════════════════════════════════════
