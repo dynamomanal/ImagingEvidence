@@ -558,6 +558,24 @@ div[data-testid="stChatMessage"] img { border-radius: var(--rs); border: 1px sol
 ::-webkit-scrollbar-thumb:hover { background: var(--mu2); }
 hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
 
+/* Hamburger sidebar toggle — hidden on desktop, shown on mobile */
+#sb-hamburger {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: .25rem .35rem;
+    margin-right: .45rem;
+    color: #FFFFFF;
+    flex-shrink: 0;
+    line-height: 0;
+    vertical-align: middle;
+    border-radius: 6px;
+    transition: background .12s ease;
+}
+#sb-hamburger:hover { background: rgba(255,255,255,.1); }
+#sb-hamburger:active { background: rgba(255,255,255,.18); }
+
 /* Desktop-only: always-open sidebar — hide collapse/expand toggle */
 @media (min-width: 769px) {
     button[data-testid="collapsedControl"],
@@ -590,6 +608,10 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
         padding: 0.7rem 0.9rem !important;
     }
     div[data-testid="stChatInput"] { border-radius: var(--rs) !important; }
+    /* Show hamburger, hide Streamlit's floating sidebar-expand button */
+    #sb-hamburger { display: inline-flex !important; align-items: center; }
+    button[data-testid="collapsedControl"],
+    button[data-testid="stSidebarCollapsedControl"] { display: none !important; }
 }
 @media (max-width: 480px) {
     .block-container {
@@ -1055,10 +1077,20 @@ _flow_label = "Groq Vision"
 st.markdown(
     f"<div style='display:flex;align-items:center;justify-content:space-between;"
     f"padding:.8rem 0 1rem 0;border-bottom:1px solid #1E293B;margin-bottom:0;'>"
+    f"<div style='display:flex;align-items:center;'>"
+    f"<button id='sb-hamburger' aria-label='Toggle menu' "
+    f"onclick=\"(function(){{var b=document.querySelector('[data-testid=stSidebarNavCollapseButton]')"
+    f"||document.querySelector('[data-testid=collapsedControl]')"
+    f"||document.querySelector('[data-testid=stSidebarCollapsedControl]');"
+    f"if(b)b.click();}})()\"> "
+    f"<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'>"
+    f"<path d='M2.5 5h15M2.5 10h15M2.5 15h15' stroke='white' stroke-width='1.75' stroke-linecap='round'/>"
+    f"</svg></button>"
     f"<div style='font-size:1rem;font-weight:700;color:#34D399;letter-spacing:-.02em;'>"
     f"Imaging<span style='color:#10B981'>.</span>Evidence"
     f"<span style='font-size:.72rem;color:#475569;font-weight:400;margin-left:.6rem;'>"
     f"{MODALITY_ICONS.get(modality,'')} {modality}</span></div>"
+    f"</div>"
     f"<div style='display:flex;align-items:center;gap:.5rem;'>{_status}"
     f"<span style='background:#1E293B;border:1px solid #334155;color:#94A3B8;"
     f"font-size:.7rem;font-weight:500;padding:.2rem .6rem;border-radius:999px;'>"
