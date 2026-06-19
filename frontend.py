@@ -558,17 +558,47 @@ div[data-testid="stChatMessage"] img { border-radius: var(--rs); border: 1px sol
 ::-webkit-scrollbar-thumb:hover { background: var(--mu2); }
 hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
 
-/* always-open sidebar — hide collapse/expand toggle */
-button[data-testid="collapsedControl"],
-button[data-testid="baseButton-headerNoPadding"],
-button[data-testid="stSidebarNavCollapseButton"],
-button[data-testid="stSidebarCollapsedControl"] { display: none !important; }
+/* Desktop-only: always-open sidebar — hide collapse/expand toggle */
+@media (min-width: 769px) {
+    button[data-testid="collapsedControl"],
+    button[data-testid="baseButton-headerNoPadding"],
+    button[data-testid="stSidebarNavCollapseButton"],
+    button[data-testid="stSidebarCollapsedControl"] { display: none !important; }
 
-/* force sidebar visible even if browser localStorage has it collapsed */
-section[data-testid="stSidebar"] {
-    transform: none !important;
-    margin-left: 0 !important;
-    visibility: visible !important;
+    section[data-testid="stSidebar"] {
+        transform: none !important;
+        margin-left: 0 !important;
+        visibility: visible !important;
+    }
+}
+
+/* ── Mobile responsive ──────────────────────────────────── */
+@media (max-width: 768px) {
+    section[data-testid="stSidebar"] {
+        min-width: 82vw !important;
+        max-width: 85vw !important;
+    }
+    .block-container {
+        max-width: 100% !important;
+        padding: 0 0.75rem 1.5rem !important;
+        padding-top: 0.75rem !important;
+    }
+    div[data-testid="stChatMessage"] { padding: 0.85rem 0 !important; }
+    div[data-testid="stChatMessage"] p,
+    div[data-testid="stChatMessage"] li { font-size: 0.895rem; line-height: 1.65; }
+    div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+        padding: 0.7rem 0.9rem !important;
+    }
+    div[data-testid="stChatInput"] { border-radius: var(--rs) !important; }
+}
+@media (max-width: 480px) {
+    .block-container {
+        padding: 0 0.4rem 1rem !important;
+        padding-top: 0.5rem !important;
+    }
+    div[data-testid="stChatMessage"] p,
+    div[data-testid="stChatMessage"] li { font-size: 0.855rem; }
+    div[data-testid="stChatInput"] textarea { font-size: 0.875rem !important; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -579,6 +609,7 @@ import streamlit.components.v1 as _components
 _components.html("""
 <script>
 (function() {
+    if (window.innerWidth <= 768) return; // leave sidebar collapsible on mobile
     // Clear any Streamlit sidebar collapsed state from localStorage
     for (var key in localStorage) {
         if (key.toLowerCase().includes('sidebar')) {
@@ -604,6 +635,9 @@ _defaults = {
     "images":           [],
     "img_names":        [],
     "view_labels":      [],
+    "cam_images":       [],
+    "cam_names":        [],
+    "cam_labels":       [],
     "modality":         "Echo",
     "history":          [],
     "last_findings":    None,
@@ -641,8 +675,11 @@ with st.sidebar:
 
     # ── new study ──
     if st.button("+ New study", use_container_width=True):
-        for _k in ("messages","images","img_names","view_labels","last_findings","last_literature"):
+        for _k in ("messages","images","img_names","view_labels",
+                   "cam_images","cam_names","cam_labels",
+                   "last_findings","last_literature"):
             st.session_state[_k] = [] if isinstance(st.session_state[_k], list) else None
+        st.session_state.pop("_cam_fp", None)
         st.rerun()
 
     # ── modality selector ──
@@ -841,16 +878,126 @@ with st.sidebar:
 
         st.session_state.view_labels = all_labels
 
+    # ── live capture / record ──
+    _sb_label("📷 Capture or record directly")
+    with st.expander("No image file? Capture here", expanded=False):
+        _cap_tab, _rec_tab = st.tabs(["📷 Photo frames", "🎬 Record video"])
+
+        with _cap_tab:
+            st.caption("Take one or more echo frames with your device camera.")
+            _cam_pic = st.camera_input(
+                "Take frame", label_visibility="collapsed", key="cam_snapshot"
+            )
+            if _cam_pic is not None:
+                _raw_cam = _cam_pic.getvalue()
+                _fp = (len(_raw_cam), _raw_cam[:128])
+                if st.session_state.get("_cam_fp") != _fp:
+                    st.session_state["_cam_fp"] = _fp
+                    _cam_img = Image.open(io.BytesIO(_raw_cam)).convert("RGB")
+                    _cam_idx = len(st.session_state.cam_images) + 1
+                    st.session_state.cam_images.append(_cam_img)
+                    st.session_state.cam_names.append(f"camera_frame_{_cam_idx}.jpg")
+                    _cam_lbl = view_options[0]
+                    st.session_state.cam_labels.append(_cam_lbl)
+            if st.session_state.cam_images:
+                _n_cam = len(st.session_state.cam_images)
+                st.markdown(
+                    f"<div style='font-size:.78rem;color:#34D399;font-weight:500;"
+                    f"margin:.3rem 0 .4rem;'>&#10003; {_n_cam} camera frame{'s' if _n_cam>1 else ''}</div>",
+                    unsafe_allow_html=True,
+                )
+                if st.button("Clear camera frames", key="clear_cam", use_container_width=True):
+                    st.session_state.cam_images = []
+                    st.session_state.cam_names  = []
+                    st.session_state.cam_labels = []
+                    st.session_state.pop("_cam_fp", None)
+                    st.rerun()
+
+        with _rec_tab:
+            st.caption("Record directly, then download and upload it above for analysis.")
+            _components.html("""
+<style>
+#rec-wrap{font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;color:#E2E8F0;background:#0F172A;border-radius:8px;padding:10px;}
+#rec-wrap video{width:100%;border-radius:6px;background:#1E293B;display:block;max-height:160px;object-fit:cover;}
+.rec-btn{flex:1;padding:7px 6px;border-radius:6px;border:1px solid #334155;cursor:pointer;font-size:12px;font-weight:500;transition:background .12s;}
+#startBtn{background:#0B3D2E;color:#34D399;border-color:#1A5C41;}
+#startBtn:hover{background:#1A5C41;}
+#stopBtn{background:#1E293B;color:#94A3B8;}
+#stopBtn:disabled{opacity:.4;cursor:default;}
+#timer{text-align:center;color:#EF4444;font-size:11px;margin-top:4px;display:none;}
+#dlBtn{display:none;margin-top:6px;padding:7px 10px;background:#1E293B;border:1px solid #334155;color:#E2E8F0;border-radius:6px;text-decoration:none;font-size:12px;text-align:center;width:100%;box-sizing:border-box;}
+#hint{display:none;font-size:11px;color:#64748B;margin-top:5px;text-align:center;line-height:1.5;}
+</style>
+<div id="rec-wrap">
+  <video id="preview" autoplay muted playsinline></video>
+  <div style="display:flex;gap:6px;margin-top:8px;">
+    <button id="startBtn" class="rec-btn" onclick="startRec()">&#9679; Start Recording</button>
+    <button id="stopBtn"  class="rec-btn" onclick="stopRec()" disabled>&#9632; Stop</button>
+  </div>
+  <div id="timer">&#9679; REC <span id="elapsed">0:00</span></div>
+  <video id="playback" controls playsinline style="display:none;margin-top:8px;width:100%;border-radius:6px;max-height:140px;"></video>
+  <a id="dlBtn" href="#" download="echo_recording.webm">&#11015; Download Recording</a>
+  <div id="hint">Download complete → upload the file using the uploader above to analyze it.</div>
+</div>
+<script>
+var _stream, _recorder, _chunks=[], _timer, _elapsed=0;
+function getMime(){
+  var t=['video/mp4;codecs=h264','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+  return t.find(function(m){return MediaRecorder.isTypeSupported(m);})||'video/webm';
+}
+async function startRec(){
+  try{
+    _stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
+    document.getElementById('preview').srcObject=_stream;
+    _chunks=[];_elapsed=0;
+    _recorder=new MediaRecorder(_stream,{mimeType:getMime()});
+    _recorder.ondataavailable=function(e){if(e.data.size>0)_chunks.push(e.data);};
+    _recorder.onstop=finalize;
+    _recorder.start(200);
+    document.getElementById('startBtn').disabled=true;
+    document.getElementById('stopBtn').disabled=false;
+    document.getElementById('timer').style.display='block';
+    _timer=setInterval(function(){
+      _elapsed++;
+      var m=Math.floor(_elapsed/60),s=_elapsed%60;
+      document.getElementById('elapsed').textContent=m+':'+(s<10?'0':'')+s;
+    },1000);
+  }catch(e){alert('Camera error: '+e.message);}
+}
+function stopRec(){
+  clearInterval(_timer);
+  if(_recorder&&_recorder.state!=='inactive')_recorder.stop();
+  if(_stream)_stream.getTracks().forEach(function(t){t.stop();});
+  document.getElementById('startBtn').disabled=false;
+  document.getElementById('stopBtn').disabled=true;
+  document.getElementById('timer').style.display='none';
+}
+function finalize(){
+  var mime=getMime();
+  var ext=mime.includes('mp4')?'mp4':'webm';
+  var blob=new Blob(_chunks,{type:mime});
+  var url=URL.createObjectURL(blob);
+  var pb=document.getElementById('playback');
+  pb.src=url;pb.style.display='block';
+  var dl=document.getElementById('dlBtn');
+  dl.href=url;dl.download='echo_recording.'+ext;dl.style.display='block';
+  document.getElementById('hint').style.display='block';
+  document.getElementById('preview').style.display='none';
+}
+</script>
+""", height=370)
+
     # ── analysis flow (Groq only) ──
     st.session_state["flow_selection"] = "Flow A - Groq Vision  (cloud · instant)"
 
+    _total_imgs = len(st.session_state.images) + len(st.session_state.cam_images)
     st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
 
     analyze_clicked = st.button(
         f"Analyze {MODALITY_ICONS.get(modality,'')}  ->",
         use_container_width=True,
         type="primary",
-        disabled=len(st.session_state.images) == 0,
+        disabled=_total_imgs == 0,
     )
 
     # ── session history ──
