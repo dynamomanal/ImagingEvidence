@@ -6,7 +6,6 @@ import warnings
 import logging
 import streamlit as st
 
-# Ensure stdout/stderr can handle Unicode on Windows (cp1252 console default)
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if sys.stderr and hasattr(sys.stderr, "reconfigure"):
@@ -24,11 +23,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 #  MODALITY CONFIG
 # ══════════════════════════════════════════════════════════════
 
-MODALITIES = [
-    "Echo",
-    "Cardiac MRI",
-    "Cardiac CT",
-]
+MODALITIES = ["Echo", "Cardiac MRI", "Cardiac CT"]
 
 MODALITY_ICONS = {
     "Echo":        "🫀",
@@ -136,7 +131,7 @@ def extract_gif_frames(raw: bytes, n: int) -> list:
 
 
 # ══════════════════════════════════════════════════════════════
-#  VIDEO HELPERS (MP4 / AVI / MOV)
+#  VIDEO HELPERS
 # ══════════════════════════════════════════════════════════════
 
 VIDEO_EXTS = {".mp4", ".avi", ".mov", ".webm", ".mkv"}
@@ -181,7 +176,6 @@ def _is_dicom(filename: str) -> bool:
 
 
 def _dicom_frame_count(raw: bytes) -> int:
-    """Return number of frames in a DICOM file (1 if single-frame)."""
     try:
         import pydicom
         ds = pydicom.dcmread(io.BytesIO(raw))
@@ -192,7 +186,6 @@ def _dicom_frame_count(raw: bytes) -> int:
 
 
 def _apply_windowing(arr, ds):
-    """Apply DICOM window center/width to a numpy array, then normalize to uint8."""
     import numpy as np
     wc = getattr(ds, "WindowCenter", None)
     ww = getattr(ds, "WindowWidth",  None)
@@ -201,10 +194,8 @@ def _apply_windowing(arr, ds):
             wc, ww = float(wc[0]), float(ww[0])
         else:
             wc, ww = float(wc), float(ww)
-        arr = arr.copy()
-        arr = arr.astype(float)
-        lo, hi = wc - ww / 2, wc + ww / 2
-        arr = arr.clip(lo, hi)
+        arr = arr.copy().astype(float)
+        arr = arr.clip(wc - ww / 2, wc + ww / 2)
     mn, mx = float(arr.min()), float(arr.max())
     if mx > mn:
         arr = (arr - mn) / (mx - mn) * 255.0
@@ -212,30 +203,17 @@ def _apply_windowing(arr, ds):
 
 
 def _dicom_to_pil(raw: bytes, frame_idx: int = 0) -> tuple:
-    """
-    Convert one frame of a DICOM file to a PIL RGB Image.
-    Applies Hounsfield rescale + window/level from the DICOM header.
-    Returns (PIL.Image, metadata dict).
-    """
-    import pydicom
-    import numpy as np
-
+    import pydicom, numpy as np
     ds  = pydicom.dcmread(io.BytesIO(raw))
     arr = ds.pixel_array.astype(float)
-
-    # Rescale slope / intercept (Hounsfield units for CT)
     slope     = float(getattr(ds, "RescaleSlope",     1))
     intercept = float(getattr(ds, "RescaleIntercept", 0))
     arr = arr * slope + intercept
-
-    # Select frame for multi-frame DICOM
     if arr.ndim == 3:
         frame_idx = min(frame_idx, arr.shape[0] - 1)
         arr = arr[frame_idx]
-
     arr = _apply_windowing(arr, ds)
     img = Image.fromarray(arr).convert("RGB")
-
     meta = {
         "modality":    str(getattr(ds, "Modality",          "Unknown")),
         "rows":        int(getattr(ds, "Rows",               0)),
@@ -248,27 +226,17 @@ def _dicom_to_pil(raw: bytes, frame_idx: int = 0) -> tuple:
 
 
 def extract_dicom_frames(raw: bytes, n: int) -> tuple:
-    """
-    Extract n evenly-spaced frames from a multi-frame DICOM file.
-    Returns (frames: list[PIL.Image], total: int, meta: dict).
-    """
-    import pydicom
-    import numpy as np
-
+    import pydicom, numpy as np
     ds  = pydicom.dcmread(io.BytesIO(raw))
     arr = ds.pixel_array.astype(float)
-
     slope     = float(getattr(ds, "RescaleSlope",     1))
     intercept = float(getattr(ds, "RescaleIntercept", 0))
     arr = arr * slope + intercept
-
     if arr.ndim == 3:
         total = arr.shape[0]
     else:
         total = 1
         arr   = arr[np.newaxis]
-
-    # Window all frames together for consistent brightness
     wc = getattr(ds, "WindowCenter", None)
     ww = getattr(ds, "WindowWidth",  None)
     if wc is not None and ww is not None:
@@ -277,18 +245,15 @@ def extract_dicom_frames(raw: bytes, n: int) -> tuple:
         else:
             wc, ww = float(wc), float(ww)
         arr = arr.clip(wc - ww / 2, wc + ww / 2)
-
     mn, mx = float(arr.min()), float(arr.max())
     if mx > mn:
         arr = (arr - mn) / (mx - mn) * 255.0
     arr = arr.astype("uint8")
-
     n = min(n, total)
     frames = []
     for i in range(n):
         idx = int(i * total / n)
         frames.append(Image.fromarray(arr[idx]).convert("RGB"))
-
     meta = {
         "modality":    str(getattr(ds, "Modality",         "Unknown")),
         "series_desc": str(getattr(ds, "SeriesDescription", "")),
@@ -298,7 +263,7 @@ def extract_dicom_frames(raw: bytes, n: int) -> tuple:
 
 
 # ══════════════════════════════════════════════════════════════
-#  PAGE CONFIG & DESIGN SYSTEM
+#  PAGE CONFIG
 # ══════════════════════════════════════════════════════════════
 
 st.set_page_config(
@@ -308,38 +273,72 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── DESIGN SYSTEM ─────────────────────────────────────────────
+# Light mode  : white/light-blue body  +  dark-navy sidebar
+# Dark mode   : near-black body        +  deep-navy sidebar
+# Accent      : #1A56DB (blue) light  /  #3B82F6 (blue) dark
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* ── LIGHT MODE TOKENS (default) ──────────────────────── */
 :root {
-    --sb:     #0F172A;
-    --sb2:    #1E293B;
-    --sb3:    #334155;
-    --sb-bd:  #1E293B;
-    --sb-t:   #94A3B8;
-    --sb-t2:  #CBD5E1;
-    --sb-dim: #475569;
+    /* body — pure white + navy text */
+    --bg:      #FFFFFF;
+    --s:       #F5F8FF;
+    --s2:      #EEF2FF;
+    --ink:     #0D1F52;
+    --ink2:    #1A3A8F;
+    --mu:      #2451B7;
+    --mu2:     #6B8FBE;
+    --bd:      #C7D9FF;
+    --bd2:     #A8C4FF;
 
-    --bg:     #0F172A;
-    --s:      #1E293B;
-    --ink:    #FFFFFF;
-    --ink2:   #E2E8F0;
-    --mu:     #94A3B8;
-    --mu2:    #64748B;
-    --bd:     #1E293B;
-    --bd2:    #334155;
+    /* sidebar */
+    --sb:      #1E3A5F;
+    --sb2:     #243F6A;
+    --sb3:     #2E4F7E;
+    --sb-bd:   #2E4F7E;
+    --sb-t:    #BFDBFE;
+    --sb-t2:   #E0EEFF;
+    --sb-dim:  #7EAAD4;
 
-    --ac:     #0B3D2E;
-    --ac2:    #1A5C41;
-    --acl:    #F0FDF4;
-    --acm:    #DCFCE7;
+    /* accent — blue */
+    --ac:      #1A56DB;
+    --ac2:     #1447C0;
+    --acl:     #EBF2FF;
+    --acm:     #BFDBFE;
 
     --r:  10px;
     --rs: 6px;
     --rp: 999px;
 }
 
+/* ── DARK MODE TOKENS (toggled via JS) ─────────────────── */
+body.dark-mode {
+    --bg:      #0A0F1E;
+    --s:       #111827;
+    --s2:      #1A2236;
+    --ink:     #E8F1FF;
+    --ink2:    #A8C4E8;
+    --mu:      #6B8FBE;
+    --mu2:     #4A6A96;
+    --bd:      #1E3055;
+    --bd2:     #243A66;
+    --sb:      #060D1A;
+    --sb2:     #0D1930;
+    --sb3:     #142240;
+    --sb-bd:   #142240;
+    --sb-t:    #7EB3E8;
+    --sb-t2:   #B8D4F0;
+    --sb-dim:  #3D608A;
+    --ac:      #3B82F6;
+    --ac2:     #2563EB;
+    --acl:     #0D1F3C;
+    --acm:     #1E3A5F;
+}
+
+/* ── BASE ─────────────────────────────────────────────── */
 html, body, [class*="css"], .stApp {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
     background: var(--bg) !important;
@@ -355,6 +354,7 @@ html, body, [class*="css"], .stApp {
     margin: 0 auto !important;
 }
 
+/* ── SIDEBAR ─────────────────────────────────────────── */
 section[data-testid="stSidebar"] {
     background: var(--sb) !important;
     border-right: 1px solid var(--sb-bd) !important;
@@ -368,6 +368,7 @@ section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] div,
 section[data-testid="stSidebar"] li,
 section[data-testid="stSidebar"] small { color: var(--sb-t) !important; }
+
 section[data-testid="stSidebar"] hr {
     border-color: var(--sb-bd) !important;
     opacity: 1 !important;
@@ -378,6 +379,7 @@ section[data-testid="stSidebar"] img {
     opacity: 0.92;
 }
 
+/* Uploader */
 section[data-testid="stSidebar"] div[data-testid="stFileUploader"] section {
     background: var(--sb2) !important;
     border: 1.5px dashed var(--sb-dim) !important;
@@ -394,6 +396,7 @@ section[data-testid="stSidebar"] div[data-testid="stFileUploader"] button {
     border-radius: var(--rs) !important;
 }
 
+/* Selectbox */
 section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
     background: var(--sb2) !important;
     border-color: var(--sb-dim) !important;
@@ -404,6 +407,7 @@ section[data-testid="stSidebar"] [data-baseweb="select"] * {
     background: var(--sb2) !important;
 }
 
+/* Expander */
 section[data-testid="stSidebar"] div[data-testid="stExpander"] {
     background: var(--sb2) !important;
     border: 1px solid var(--sb-bd) !important;
@@ -412,6 +416,7 @@ section[data-testid="stSidebar"] div[data-testid="stExpander"] {
 section[data-testid="stSidebar"] div[data-testid="stExpander"] summary { color: var(--sb-t) !important; }
 section[data-testid="stSidebar"] div[data-testid="stExpander"] summary:hover { color: var(--sb-t2) !important; }
 
+/* Buttons */
 section[data-testid="stSidebar"] .stButton > button {
     background: var(--sb2) !important;
     color: var(--sb-t2) !important;
@@ -444,6 +449,7 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"]:disabled {
 section[data-testid="stSidebar"] .stCaption,
 section[data-testid="stSidebar"] .stCaption * { color: var(--sb-dim) !important; }
 
+/* ── CHAT MESSAGES ───────────────────────────────────── */
 div[data-testid="stChatMessage"] {
     background: transparent !important;
     border: none !important;
@@ -456,7 +462,7 @@ div[data-testid="stChatMessage"] {
 div[data-testid="stChatMessage"]:last-of-type { border-bottom: none !important; }
 
 div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
-    background: var(--bd2) !important;
+    background: var(--s2) !important;
     border: 1px solid var(--bd) !important;
     border-radius: var(--r) !important;
     padding: 1rem 1.15rem !important;
@@ -513,7 +519,7 @@ div[data-testid="stChatMessage"] table {
     border-collapse: collapse; width: 100%; font-size: 0.88rem; margin: 0.9rem 0;
 }
 div[data-testid="stChatMessage"] th {
-    background: var(--bd2) !important;
+    background: var(--s2) !important;
     color: var(--mu) !important;
     font-weight: 600; font-size: 0.73rem; text-transform: uppercase;
     letter-spacing: 0.07em; padding: 0.5rem 0.8rem;
@@ -525,16 +531,17 @@ div[data-testid="stChatMessage"] td {
 div[data-testid="stChatMessage"] tr:last-child td { border-bottom: none; }
 div[data-testid="stChatMessageContainer"] { background: transparent !important; }
 
+/* ── CHAT INPUT ──────────────────────────────────────── */
 div[data-testid="stChatInput"] {
     background: var(--s) !important;
     border: 1.5px solid var(--bd) !important;
     border-radius: var(--r) !important;
-    box-shadow: 0 1px 3px rgba(15,23,42,.05), 0 4px 14px rgba(15,23,42,.04) !important;
+    box-shadow: 0 1px 3px rgba(26,86,219,.05), 0 4px 14px rgba(26,86,219,.04) !important;
     transition: border-color .15s ease, box-shadow .15s ease;
 }
 div[data-testid="stChatInput"]:focus-within {
     border-color: var(--ac) !important;
-    box-shadow: 0 0 0 3px rgba(11,61,46,.07) !important;
+    box-shadow: 0 0 0 3px rgba(26,86,219,.08) !important;
 }
 div[data-testid="stChatInput"] textarea {
     color: var(--ink) !important;
@@ -542,6 +549,7 @@ div[data-testid="stChatInput"] textarea {
     font-family: 'Inter', sans-serif !important;
 }
 
+/* ── ALERTS / SPINNERS ──────────────────────────────── */
 div[data-testid="stAlert"] {
     background: var(--acl) !important;
     border: 1px solid var(--acm) !important;
@@ -552,13 +560,14 @@ div[data-testid="stAlert"] {
 div[data-testid="stSpinner"] p { color: var(--mu) !important; font-size: 0.87rem !important; }
 div[data-testid="stChatMessage"] img { border-radius: var(--rs); border: 1px solid var(--bd); }
 
+/* ── SCROLLBAR ──────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--bd); border-radius: var(--rp); }
+::-webkit-scrollbar-thumb { background: var(--bd2); border-radius: var(--rp); }
 ::-webkit-scrollbar-thumb:hover { background: var(--mu2); }
 hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
 
-/* Hamburger sidebar toggle — hidden on desktop, shown on mobile */
+/* ── MOBILE ─────────────────────────────────────────── */
 #sb-hamburger {
     display: none;
     background: none;
@@ -566,23 +575,21 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
     cursor: pointer;
     padding: .25rem .35rem;
     margin-right: .45rem;
-    color: #FFFFFF;
+    color: var(--ink);
     flex-shrink: 0;
     line-height: 0;
     vertical-align: middle;
     border-radius: 6px;
     transition: background .12s ease;
 }
-#sb-hamburger:hover { background: rgba(255,255,255,.1); }
-#sb-hamburger:active { background: rgba(255,255,255,.18); }
+#sb-hamburger:hover { background: rgba(26,86,219,.1); }
+#sb-hamburger:active { background: rgba(26,86,219,.18); }
 
-/* Desktop-only: always-open sidebar — hide collapse/expand toggle */
 @media (min-width: 769px) {
     button[data-testid="collapsedControl"],
     button[data-testid="baseButton-headerNoPadding"],
     button[data-testid="stSidebarNavCollapseButton"],
     button[data-testid="stSidebarCollapsedControl"] { display: none !important; }
-
     section[data-testid="stSidebar"] {
         transform: none !important;
         margin-left: 0 !important;
@@ -590,7 +597,6 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
     }
 }
 
-/* ── Mobile responsive ──────────────────────────────────── */
 @media (max-width: 768px) {
     section[data-testid="stSidebar"] {
         min-width: 82vw !important;
@@ -608,7 +614,6 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
         padding: 0.7rem 0.9rem !important;
     }
     div[data-testid="stChatInput"] { border-radius: var(--rs) !important; }
-    /* Show hamburger, hide Streamlit's floating sidebar-expand button */
     #sb-hamburger { display: inline-flex !important; align-items: center; }
     button[data-testid="collapsedControl"],
     button[data-testid="stSidebarCollapsedControl"] { display: none !important; }
@@ -622,36 +627,98 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
     div[data-testid="stChatMessage"] li { font-size: 0.855rem; }
     div[data-testid="stChatInput"] textarea { font-size: 0.875rem !important; }
 }
+
+/* ── THEME TOGGLE BUTTON ────────────────────────────────── */
+#theme-toggle {
+    background: none;
+    border: 1px solid var(--bd);
+    cursor: pointer;
+    padding: .32rem .42rem;
+    border-radius: 8px;
+    color: var(--ink);
+    line-height: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .12s ease, border-color .12s ease;
+    flex-shrink: 0;
+}
+#theme-toggle:hover { background: var(--s2); border-color: var(--bd2); }
+#theme-toggle svg { display: block; }
 </style>
 """, unsafe_allow_html=True)
 
 
-# Force sidebar open on every load (clears any browser-stored collapsed state)
+# ── Sidebar toggle JS ──────────────────────────────────────────
 import streamlit.components.v1 as _components
 _components.html("""
 <script>
 (function() {
-    if (window.innerWidth <= 768) return; // leave sidebar collapsible on mobile
-    // Clear any Streamlit sidebar collapsed state from localStorage
-    for (var key in localStorage) {
-        if (key.toLowerCase().includes('sidebar')) {
-            localStorage.removeItem(key);
+    var par = window.parent || window;
+    var pd  = par.document;
+
+    /* ── sidebar auto-open ── */
+    var isMobile = par.innerWidth <= 768;
+    if (!isMobile) {
+        for (var key in localStorage) {
+            if (key.toLowerCase().includes('sidebar')) localStorage.removeItem(key);
         }
+        function tryOpen() {
+            var btn = pd.querySelector('[data-testid="stSidebarCollapsedControl"]') ||
+                      pd.querySelector('[data-testid="collapsedControl"]');
+            if (btn) btn.click();
+        }
+        setTimeout(tryOpen, 300);
+        setTimeout(tryOpen, 800);
     }
-    // Click the expand button if sidebar is collapsed
-    function tryOpen() {
-        var btn = document.querySelector('[data-testid="stSidebarCollapsedControl"]') ||
-                  document.querySelector('[data-testid="collapsedControl"]');
-        if (btn) btn.click();
+    if (!par._sbHamburgerWired) {
+        par._sbHamburgerWired = true;
+        pd.addEventListener('click', function(e) {
+            var btn = (e.target.closest ? e.target.closest('#sb-hamburger') : null) ||
+                      (e.target.id === 'sb-hamburger' ? e.target : null);
+            if (!btn) return;
+            var toggle = pd.querySelector('[data-testid="stSidebarNavCollapseButton"]') ||
+                         pd.querySelector('[data-testid="collapsedControl"]')            ||
+                         pd.querySelector('[data-testid="stSidebarCollapsedControl"]');
+            if (toggle) toggle.click();
+        });
     }
-    setTimeout(tryOpen, 300);
-    setTimeout(tryOpen, 800);
+
+    /* ── theme toggle ── */
+    function syncIcons(dark) {
+        var moon = pd.getElementById('icon-moon');
+        var sun  = pd.getElementById('icon-sun');
+        if (moon) moon.style.display = dark ? 'none'  : 'block';
+        if (sun)  sun.style.display  = dark ? 'block' : 'none';
+    }
+    function applyTheme(dark) {
+        if (dark) {
+            pd.body.classList.add('dark-mode');
+        } else {
+            pd.body.classList.remove('dark-mode');
+        }
+        syncIcons(dark);
+    }
+    /* apply saved preference on every render */
+    var savedTheme = localStorage.getItem('ie-theme');
+    applyTheme(savedTheme === 'dark');
+
+    if (!par._themeWired) {
+        par._themeWired = true;
+        pd.addEventListener('click', function(e) {
+            var btn = e.target.closest ? e.target.closest('#theme-toggle') : null;
+            if (!btn) return;
+            var dark = !pd.body.classList.contains('dark-mode');
+            localStorage.setItem('ie-theme', dark ? 'dark' : 'light');
+            applyTheme(dark);
+        });
+    }
 })();
 </script>
 """, height=0)
 
 
-# ── session state ─────────────────────────────────────────────────────────────
+# ── Session state ──────────────────────────────────────────────
 _defaults = {
     "messages":         [],
     "images":           [],
@@ -677,7 +744,7 @@ for _k, _v in _defaults.items():
 def _sb_label(text):
     st.markdown(
         f"<div style='font-size:.68rem;font-weight:600;text-transform:uppercase;"
-        f"letter-spacing:.09em;color:#475569;margin:.9rem 0 .4rem;'>{text}</div>",
+        f"letter-spacing:.09em;color:#7EAAD4;margin:.9rem 0 .4rem;'>{text}</div>",
         unsafe_allow_html=True,
     )
 
@@ -686,10 +753,10 @@ with st.sidebar:
     # ── brand ──
     st.markdown(
         "<div style='padding-bottom:1.1rem;margin-bottom:.6rem;"
-        "border-bottom:1px solid #1E293B;'>"
-        "<div style='font-size:1.15rem;font-weight:700;color:#E2E8F0;"
-        "letter-spacing:-.025em;'>Imaging<span style='color:#34D399'>.</span>Evidence</div>"
-        "<div style='font-size:.72rem;color:#475569;margin-top:.15rem;'>"
+        "border-bottom:1px solid #2E4F7E;'>"
+        "<div style='font-size:1.15rem;font-weight:700;color:#E0EEFF;"
+        "letter-spacing:-.025em;'>Imaging<span style='color:#3B82F6'>.</span>Evidence</div>"
+        "<div style='font-size:.72rem;color:#7EAAD4;margin-top:.15rem;'>"
         "Multimodal cardiac imaging AI</div>"
         "</div>",
         unsafe_allow_html=True,
@@ -704,7 +771,7 @@ with st.sidebar:
         st.session_state.pop("_cam_fp", None)
         st.rerun()
 
-    # ── modality selector ──
+    # ── modality ──
     _sb_label("Imaging modality")
     selected_modality = st.selectbox(
         "modality",
@@ -729,9 +796,7 @@ with st.sidebar:
 
     uploaded_files = st.file_uploader(
         "upload",
-        type=["jpg", "jpeg", "png", "tiff", "gif",
-              "mp4", "avi", "mov", "webm",
-              "dcm", "dicom"],
+        type=["jpg","jpeg","png","tiff","gif","mp4","avi","mov","webm","dcm","dicom"],
         accept_multiple_files=True,
         label_visibility="collapsed",
         help=MODALITY_HINTS.get(modality, "JPG PNG DICOM"),
@@ -744,7 +809,7 @@ with st.sidebar:
 
         n_up = len(uploaded_files)
         st.markdown(
-            f"<div style='font-size:.78rem;color:#34D399;font-weight:500;"
+            f"<div style='font-size:.78rem;color:#3B82F6;font-weight:500;"
             f"margin:.45rem 0 .4rem;'>&#10003; {n_up} file{'s' if n_up>1 else ''} loaded</div>",
             unsafe_allow_html=True,
         )
@@ -763,7 +828,6 @@ with st.sidebar:
                 n_total = 0
                 is_animated = False
 
-            # ── expander title ──
             if is_animated:
                 title_suffix = f" · GIF · {n_total}f"
             elif is_video:
@@ -775,12 +839,11 @@ with st.sidebar:
 
             with st.expander(f"#{i+1} · {f.name[:24]}{title_suffix}", expanded=False):
 
-                # ── DICOM ─────────────────────────────────────────────────
+                # ── DICOM ──────────────────────────────────────────────
                 if is_dcm:
                     try:
                         dcm_frames = _dicom_frame_count(raw)
                         if dcm_frames > 1:
-                            # Multi-frame DICOM (cine MRI, multi-slice CT)
                             st.caption(f"Multi-frame DICOM · {dcm_frames} frames")
                             n_extract = st.slider(
                                 "Frames to extract",
@@ -790,7 +853,6 @@ with st.sidebar:
                             )
                             with st.spinner("Reading DICOM frames..."):
                                 frames, total_f, meta = extract_dicom_frames(raw, n_extract)
-                            # thumbnail strip
                             thumb_cols = st.columns(len(frames))
                             for fi, (col, frame) in enumerate(zip(thumb_cols, frames)):
                                 with col:
@@ -804,13 +866,11 @@ with st.sidebar:
                             desc    = meta.get("series_desc", "")
                             dicom_m = meta.get("modality", "")
                             st.caption(
-                                f"{len(raw)/1024:.1f} KB · {total_f} frames · "
-                                f"{n_extract} extracted"
+                                f"{len(raw)/1024:.1f} KB · {total_f} frames · {n_extract} extracted"
                                 + (f" · {dicom_m}" if dicom_m else "")
                                 + (f" · {desc}" if desc else "")
                             )
                         else:
-                            # Single-frame DICOM
                             with st.spinner("Reading DICOM..."):
                                 img, meta = _dicom_to_pil(raw, frame_idx=0)
                             st.image(img, width="stretch")
@@ -820,8 +880,7 @@ with st.sidebar:
                             desc    = meta.get("series_desc", "")
                             dicom_m = meta.get("modality", "")
                             st.caption(
-                                f"{len(raw)/1024:.1f} KB · "
-                                f"{meta['rows']}x{meta['cols']}px"
+                                f"{len(raw)/1024:.1f} KB · {meta['rows']}x{meta['cols']}px"
                                 + (f" · {dicom_m}" if dicom_m else "")
                                 + (f" · {desc}" if desc else "")
                             )
@@ -829,10 +888,9 @@ with st.sidebar:
                         st.error(f"Could not read DICOM: {e}")
                         n_added = 0
 
-                # ── ANIMATED GIF ──────────────────────────────────────────
+                # ── ANIMATED GIF ───────────────────────────────────────
                 elif is_animated:
-                    st.image(raw, width="stretch",
-                             caption=f"Animated GIF · {n_total} frames")
+                    st.image(raw, width="stretch", caption=f"Animated GIF · {n_total} frames")
                     n_extract = st.slider(
                         "Frames to extract",
                         min_value=1, max_value=min(n_total, 8),
@@ -846,11 +904,9 @@ with st.sidebar:
                             f"{f.name} [frame {fi+1}/{n_extract}]"
                         )
                     n_added = n_extract
-                    st.caption(
-                        f"{len(raw)/1024:.1f} KB · {n_total} frames · {n_extract} extracted"
-                    )
+                    st.caption(f"{len(raw)/1024:.1f} KB · {n_total} frames · {n_extract} extracted")
 
-                # ── VIDEO ─────────────────────────────────────────────────
+                # ── VIDEO ──────────────────────────────────────────────
                 elif is_video:
                     st.video(raw)
                     n_extract = st.slider(
@@ -880,7 +936,7 @@ with st.sidebar:
                         f"{len(raw)/1024:.1f} KB · {n_total_vid} total frames · {n_added} extracted"
                     )
 
-                # ── STATIC IMAGE ──────────────────────────────────────────
+                # ── STATIC IMAGE ───────────────────────────────────────
                 else:
                     img = Image.open(io.BytesIO(raw)).convert("RGB")
                     st.session_state.images.append(img)
@@ -889,7 +945,7 @@ with st.sidebar:
                     n_added = 1
                     st.caption(f"{len(raw)/1024:.1f} KB · {img.size[0]}x{img.size[1]}px")
 
-                # ── view / series label ──
+                # ── view label ──
                 label = st.selectbox(
                     "view / series",
                     view_options,
@@ -900,7 +956,7 @@ with st.sidebar:
 
         st.session_state.view_labels = all_labels
 
-    # ── live capture / record ──
+    # ── live capture ──
     _sb_label("📷 Capture or record directly")
     with st.expander("No image file? Capture here", expanded=False):
         _cap_tab, _rec_tab = st.tabs(["📷 Photo frames", "🎬 Record video"])
@@ -919,12 +975,11 @@ with st.sidebar:
                     _cam_idx = len(st.session_state.cam_images) + 1
                     st.session_state.cam_images.append(_cam_img)
                     st.session_state.cam_names.append(f"camera_frame_{_cam_idx}.jpg")
-                    _cam_lbl = view_options[0]
-                    st.session_state.cam_labels.append(_cam_lbl)
+                    st.session_state.cam_labels.append(view_options[0])
             if st.session_state.cam_images:
                 _n_cam = len(st.session_state.cam_images)
                 st.markdown(
-                    f"<div style='font-size:.78rem;color:#34D399;font-weight:500;"
+                    f"<div style='font-size:.78rem;color:#3B82F6;font-weight:500;"
                     f"margin:.3rem 0 .4rem;'>&#10003; {_n_cam} camera frame{'s' if _n_cam>1 else ''}</div>",
                     unsafe_allow_html=True,
                 )
@@ -939,16 +994,16 @@ with st.sidebar:
             st.caption("Record directly, then download and upload it above for analysis.")
             _components.html("""
 <style>
-#rec-wrap{font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;color:#E2E8F0;background:#0F172A;border-radius:8px;padding:10px;}
-#rec-wrap video{width:100%;border-radius:6px;background:#1E293B;display:block;max-height:160px;object-fit:cover;}
-.rec-btn{flex:1;padding:7px 6px;border-radius:6px;border:1px solid #334155;cursor:pointer;font-size:12px;font-weight:500;transition:background .12s;}
-#startBtn{background:#0B3D2E;color:#34D399;border-color:#1A5C41;}
-#startBtn:hover{background:#1A5C41;}
-#stopBtn{background:#1E293B;color:#94A3B8;}
+#rec-wrap{font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;color:#E0EEFF;background:#0D1930;border-radius:8px;padding:10px;}
+#rec-wrap video{width:100%;border-radius:6px;background:#142240;display:block;max-height:160px;object-fit:cover;}
+.rec-btn{flex:1;padding:7px 6px;border-radius:6px;border:1px solid #2E4F7E;cursor:pointer;font-size:12px;font-weight:500;transition:background .12s;}
+#startBtn{background:#1A3A7A;color:#60A5FA;border-color:#1E4D99;}
+#startBtn:hover{background:#1E4D99;}
+#stopBtn{background:#142240;color:#7EAAD4;}
 #stopBtn:disabled{opacity:.4;cursor:default;}
 #timer{text-align:center;color:#EF4444;font-size:11px;margin-top:4px;display:none;}
-#dlBtn{display:none;margin-top:6px;padding:7px 10px;background:#1E293B;border:1px solid #334155;color:#E2E8F0;border-radius:6px;text-decoration:none;font-size:12px;text-align:center;width:100%;box-sizing:border-box;}
-#hint{display:none;font-size:11px;color:#64748B;margin-top:5px;text-align:center;line-height:1.5;}
+#dlBtn{display:none;margin-top:6px;padding:7px 10px;background:#142240;border:1px solid #2E4F7E;color:#E0EEFF;border-radius:6px;text-decoration:none;font-size:12px;text-align:center;width:100%;box-sizing:border-box;}
+#hint{display:none;font-size:11px;color:#7EAAD4;margin-top:5px;text-align:center;line-height:1.5;}
 </style>
 <div id="rec-wrap">
   <video id="preview" autoplay muted playsinline></video>
@@ -962,7 +1017,7 @@ with st.sidebar:
   <div id="hint">Download complete → upload the file using the uploader above to analyze it.</div>
 </div>
 <script>
-var _stream, _recorder, _chunks=[], _timer, _elapsed=0;
+var _stream,_recorder,_chunks=[],_timer,_elapsed=0;
 function getMime(){
   var t=['video/mp4;codecs=h264','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
   return t.find(function(m){return MediaRecorder.isTypeSupported(m);})||'video/webm';
@@ -995,10 +1050,8 @@ function stopRec(){
   document.getElementById('timer').style.display='none';
 }
 function finalize(){
-  var mime=getMime();
-  var ext=mime.includes('mp4')?'mp4':'webm';
-  var blob=new Blob(_chunks,{type:mime});
-  var url=URL.createObjectURL(blob);
+  var mime=getMime(),ext=mime.includes('mp4')?'mp4':'webm';
+  var blob=new Blob(_chunks,{type:mime}),url=URL.createObjectURL(blob);
   var pb=document.getElementById('playback');
   pb.src=url;pb.style.display='block';
   var dl=document.getElementById('dlBtn');
@@ -1009,7 +1062,6 @@ function finalize(){
 </script>
 """, height=370)
 
-    # ── analysis flow (Groq only) ──
     st.session_state["flow_selection"] = "Flow A - Groq Vision  (cloud · instant)"
 
     _total_imgs = len(st.session_state.images) + len(st.session_state.cam_images)
@@ -1029,24 +1081,21 @@ function finalize(){
             _icon = MODALITY_ICONS.get(entry.get("modality", "Echo"), "🩻")
             st.markdown(
                 f"<div style='padding:.38rem .55rem;border-radius:5px;font-size:.8rem;"
-                f"color:#94A3B8;background:#1E293B;margin-bottom:.22rem;"
+                f"color:#7EAAD4;background:#142240;margin-bottom:.22rem;"
                 f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"
                 f"{_icon} {entry['label']}</div>",
                 unsafe_allow_html=True,
             )
 
-    # ── info expander ──
     st.markdown("---")
     with st.expander("Supported modalities", expanded=False):
         for m in MODALITIES:
             st.markdown(f"**{MODALITY_ICONS.get(m,'')} {m}**  \n{MODALITY_HINTS.get(m,'')}\n")
 
-    _badge_color, _badge_text = "#34D399", "Groq Cloud · instant"
-
     st.markdown(
-        f"<div style='font-size:.68rem;color:{_badge_color};text-align:center;"
-        f"margin-top:.7rem;font-weight:500;'>&#9711; {_badge_text}</div>"
-        "<div style='font-size:.65rem;color:#94A3B8;text-align:center;"
+        "<div style='font-size:.68rem;color:#3B82F6;text-align:center;"
+        "margin-top:.7rem;font-weight:500;'>&#9711; Groq Cloud · instant</div>"
+        "<div style='font-size:.65rem;color:#7EAAD4;text-align:center;"
         "line-height:1.75;margin-top:.4rem;'>"
         "Clinician review required · Not a diagnostic device"
         "</div>",
@@ -1065,49 +1114,62 @@ if n_views > 0:
     _label  = f"{n_views} image{'s' if n_views > 1 else ''} ready"
     _status = (
         f"<span style='display:inline-flex;align-items:center;gap:.35rem;"
-        f"background:#0B3D2E;border:1px solid #1A5C41;color:#34D399;"
+        f"background:#EBF2FF;border:1px solid #BFDBFE;color:#1447C0;"
         f"font-size:.72rem;font-weight:500;padding:.22rem .65rem;border-radius:999px;'>"
-        f"<span style='width:6px;height:6px;background:#10B981;"
+        f"<span style='width:6px;height:6px;background:#1A56DB;"
         f"border-radius:50%;display:inline-block;'></span>"
         f"{_label}</span>"
     )
 
-_flow_label = "Groq Vision"
-
 st.markdown(
     f"<div style='display:flex;align-items:center;justify-content:space-between;"
-    f"padding:.8rem 0 1rem 0;border-bottom:1px solid #1E293B;margin-bottom:0;'>"
+    f"padding:.8rem 0 1rem 0;border-bottom:1px solid var(--bd);margin-bottom:0;'>"
     f"<div style='display:flex;align-items:center;'>"
     f"<button id='sb-hamburger' aria-label='Toggle menu'>"
     f"<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'>"
-    f"<path d='M2.5 5h15M2.5 10h15M2.5 15h15' stroke='white' stroke-width='1.75' stroke-linecap='round'/>"
+    f"<path d='M2.5 5h15M2.5 10h15M2.5 15h15' stroke='currentColor' stroke-width='1.75' stroke-linecap='round'/>"
     f"</svg></button>"
-    f"<div style='font-size:1rem;font-weight:700;color:#34D399;letter-spacing:-.02em;'>"
-    f"Imaging<span style='color:#10B981'>.</span>Evidence"
-    f"<span style='font-size:.72rem;color:#475569;font-weight:400;margin-left:.6rem;'>"
+    f"<div style='font-size:1rem;font-weight:700;color:#1A56DB;letter-spacing:-.02em;'>"
+    f"Imaging<span style='color:#3B82F6'>.</span>Evidence"
+    f"<span style='font-size:.72rem;color:var(--mu);font-weight:400;margin-left:.6rem;'>"
     f"{MODALITY_ICONS.get(modality,'')} {modality}</span></div>"
     f"</div>"
     f"<div style='display:flex;align-items:center;gap:.5rem;'>{_status}"
-    f"<span style='background:#1E293B;border:1px solid #334155;color:#94A3B8;"
+    f"<span style='background:var(--s2);border:1px solid var(--bd2);color:var(--mu);"
     f"font-size:.7rem;font-weight:500;padding:.2rem .6rem;border-radius:999px;'>"
-    f"{_flow_label}"
-    f"</span></div></div>",
+    f"Groq Vision</span>"
+    f"<button id='theme-toggle' title='Toggle dark / light mode'>"
+    f"<svg id='icon-moon' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
+    f"<path d='M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z'/></svg>"
+    f"<svg id='icon-sun' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='display:none'>"
+    f"<circle cx='12' cy='12' r='5'/><line x1='12' y1='1' x2='12' y2='3'/>"
+    f"<line x1='12' y1='21' x2='12' y2='23'/><line x1='4.22' y1='4.22' x2='5.64' y2='5.64'/>"
+    f"<line x1='18.36' y1='18.36' x2='19.78' y2='19.78'/><line x1='1' y1='12' x2='3' y2='12'/>"
+    f"<line x1='21' y1='12' x2='23' y2='12'/><line x1='4.22' y1='19.78' x2='5.64' y2='18.36'/>"
+    f"<line x1='18.36' y1='5.64' x2='19.78' y2='4.22'/></svg>"
+    f"</button>"
+    f"</div></div>",
     unsafe_allow_html=True,
 )
 
 
 # ══════════════════════════════════════════════════════════════
-#  CHAT THREAD / EMPTY STATE
+#  CHAT / EMPTY STATE
 # ══════════════════════════════════════════════════════════════
+_AVATAR = {
+    "user":      "🧑‍⚕️",
+    "assistant": ":material/ecg_heart:",
+}
+
 if not st.session_state.messages:
     chips = EMPTY_STATE_CHIPS.get(modality, EMPTY_STATE_CHIPS["Echo"])
     st.markdown(
         "<div style='text-align:center;padding:4.5rem 1rem 3rem;'>"
         f"<div style='font-size:2rem;opacity:.2;margin-bottom:1.2rem;'>{MODALITY_ICONS.get(modality,'🩻')}</div>"
-        "<div style='font-size:1.45rem;font-weight:600;color:#FFFFFF;"
+        "<div style='font-size:1.45rem;font-weight:600;color:var(--ink);"
         "letter-spacing:-.025em;margin-bottom:.55rem;'>"
         f"Upload a {modality} study</div>"
-        "<div style='font-size:.9rem;color:#94A3B8;max-width:380px;"
+        "<div style='font-size:.9rem;color:var(--mu);max-width:380px;"
         "margin:0 auto 2.5rem;line-height:1.65;'>"
         f"Add one or more {modality} images from the left panel, "
         "then run the analysis to receive a guideline-referenced cardiac report."
@@ -1118,15 +1180,15 @@ if not st.session_state.messages:
     )
     for chip in chips:
         st.markdown(
-            f"<div style='background:#1E293B;border:1px solid #334155;color:#E2E8F0;"
+            f"<div style='background:var(--acl);border:1px solid var(--acm);color:var(--ac);"
             f"padding:.4rem .85rem;border-radius:999px;font-size:.82rem;'>{chip}</div>",
             unsafe_allow_html=True,
         )
     st.markdown("</div></div>", unsafe_allow_html=True)
-
 else:
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
+        _av = _AVATAR.get(msg["role"], msg["role"])
+        with st.chat_message(msg["role"], avatar=_av):
             if "images" in msg and msg["images"]:
                 imgs = msg["images"]
                 cols = st.columns(min(len(imgs), 4))
@@ -1137,11 +1199,9 @@ else:
             if msg.get("is_compare"):
                 _nv  = msg.get("n_views", "?")
                 _mod = msg.get("modality", "Cardiac")
+                st.markdown(f"### {_mod} Report - {_nv} image{'s' if _nv != 1 else ''} - Compare Mode")
                 st.markdown(
-                    f"### {_mod} Report - {_nv} image{'s' if _nv != 1 else ''} - Compare Mode"
-                )
-                st.markdown(
-                    "<div style='font-size:.78rem;color:#94A3B8;margin:.15rem 0 1rem;'>"
+                    "<div style='font-size:.78rem;color:var(--mu);margin:.15rem 0 1rem;'>"
                     "Stage 1 descriptions - Flow A (Groq Vision) vs Flow B (MedGemma)"
                     "</div>",
                     unsafe_allow_html=True,
@@ -1149,9 +1209,9 @@ else:
                 _col_a, _col_b = st.columns(2, gap="medium")
                 with _col_a:
                     st.markdown(
-                        "<div style='background:#0B3D2E;border:1px solid #1A5C41;"
+                        "<div style='background:var(--acl);border:1px solid var(--acm);"
                         "border-radius:8px;padding:.55rem .85rem .4rem;margin-bottom:.55rem;'>"
-                        "<span style='font-size:.68rem;font-weight:700;color:#34D399;"
+                        "<span style='font-size:.68rem;font-weight:700;color:var(--ac);"
                         "text-transform:uppercase;letter-spacing:.09em;'>"
                         "Flow A - Groq Vision</span></div>",
                         unsafe_allow_html=True,
@@ -1171,9 +1231,9 @@ else:
                         st.warning(msg.get("findings_b", "_No output_"))
                     else:
                         st.markdown(
-                            "<div style='background:#1C1917;border:1px solid #44403C;"
+                            "<div style='background:var(--s2);border:1px solid var(--bd);"
                             "border-radius:8px;padding:.55rem .85rem .4rem;margin-bottom:.55rem;'>"
-                            "<span style='font-size:.68rem;font-weight:700;color:#A8A29E;"
+                            "<span style='font-size:.68rem;font-weight:700;color:var(--mu);"
                             "text-transform:uppercase;letter-spacing:.09em;'>"
                             "Flow B - MedGemma</span></div>",
                             unsafe_allow_html=True,
@@ -1181,7 +1241,7 @@ else:
                         st.markdown(msg.get("findings_b", "_No output_"))
                 st.markdown("---")
                 st.markdown(
-                    "<div style='font-size:.68rem;font-weight:700;color:#94A3B8;"
+                    "<div style='font-size:.68rem;font-weight:700;color:var(--mu);"
                     "text-transform:uppercase;letter-spacing:.09em;margin:.5rem 0 .3rem;'>"
                     "Synthesis - Based on Flow A findings</div>",
                     unsafe_allow_html=True,
@@ -1192,15 +1252,12 @@ else:
             else:
                 st.markdown(msg["content"])
 
-    # After messages render, scroll so the latest message is visible
     _components.html("""
 <script>
 (function() {
     setTimeout(function() {
         var msgs = window.parent.document.querySelectorAll('[data-testid="stChatMessage"]');
-        if (msgs.length > 0) {
-            msgs[msgs.length - 1].scrollIntoView({block: 'start'});
-        }
+        if (msgs.length > 0) msgs[msgs.length - 1].scrollIntoView({block: 'start'});
     }, 120);
 })();
 </script>
@@ -1237,6 +1294,18 @@ if analyze_clicked and st.session_state.images:
         "img_names": [f"{labels[i]} - {st.session_state.img_names[i]}" for i in range(n)],
     })
 
+    # Render the user message immediately so the user sees it while pipeline runs
+    with st.chat_message("user", avatar=_AVATAR["user"]):
+        _imgs_now = st.session_state.messages[-1]["images"]
+        if _imgs_now:
+            _cols_now = st.columns(min(len(_imgs_now), 4))
+            for _ci, (_im, _nm) in enumerate(
+                zip(_imgs_now, st.session_state.messages[-1].get("img_names", []))
+            ):
+                with _cols_now[_ci % 4]:
+                    st.image(_im, caption=_nm, width="stretch")
+        st.markdown(st.session_state.messages[-1]["content"])
+
     try:
         from agent import run_groq_vision, run_literature_search, run_synthesis
 
@@ -1244,22 +1313,24 @@ if analyze_clicked and st.session_state.images:
         literature = None
         synthesis  = None
 
-        with st.status("Running 3-stage analysis pipeline...", expanded=True) as status:
-            st.write(f"Stage 1 — Analysing {modality} with Groq Vision...")
-            findings = run_groq_vision(st.session_state.images, question, modality)
-            st.write(f"Stage 1 complete — {len(findings)} chars")
+        # Spinner avatar signals "AI is working"
+        with st.chat_message("assistant", avatar="spinner"):
+            with st.status("Running 3-stage analysis pipeline...", expanded=True) as status:
+                st.write(f"Stage 1 — Analysing {modality} with Groq Vision...")
+                findings = run_groq_vision(st.session_state.images, question, modality)
+                st.write(f"Stage 1 complete — {len(findings)} chars")
 
-            st.write("Stage 2 — Searching PubMed & PubMed Central...")
-            literature = run_literature_search(findings, modality)
-            n_pub = len(literature.get("pubmed", []))
-            n_pmc = len(literature.get("pmc", []))
-            n_sch = len(literature.get("scholar", []))
-            st.write(f"Stage 2 complete — {n_pub} PubMed + {n_pmc} PMC + {n_sch} Scholar")
+                st.write("Stage 2 — Searching PubMed & PubMed Central...")
+                literature = run_literature_search(findings, modality)
+                n_pub = len(literature.get("pubmed", []))
+                n_pmc = len(literature.get("pmc", []))
+                n_sch = len(literature.get("scholar", []))
+                st.write(f"Stage 2 complete — {n_pub} PubMed + {n_pmc} PMC + {n_sch} Scholar")
 
-            st.write("Stage 3 — Synthesizing with Groq / LLaMA-3...")
-            synthesis = run_synthesis(findings, literature, modality)
-            st.write("Stage 3 complete — report generated")
-            status.update(label="Analysis complete", state="complete", expanded=False)
+                st.write("Stage 3 — Synthesizing with Groq / LLaMA-3...")
+                synthesis = run_synthesis(findings, literature, modality)
+                st.write("Stage 3 complete — report generated")
+                status.update(label="Analysis complete ✓", state="complete", expanded=False)
 
         n_papers = (
             len((literature or {}).get("pubmed",  [])) +
@@ -1297,7 +1368,7 @@ if _last_findings:
     from vector_store import get_store as _gs
     _store_count = _gs().count
     st.markdown(
-        f"<div style='font-size:.75rem;color:#34D399;text-align:center;"
+        f"<div style='font-size:.75rem;color:#3B82F6;text-align:center;"
         f"margin:.4rem 0 .2rem;font-weight:500;'>"
         f"&#9711; RAG active &nbsp;·&nbsp; {_store_count} papers indexed"
         f"</div>",
@@ -1307,28 +1378,36 @@ if _last_findings:
 user_input = st.chat_input("Ask a follow-up question about this study...")
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
+
+    # Show the user message immediately
+    with st.chat_message("user", avatar=_AVATAR["user"]):
+        st.markdown(user_input)
+
     last_findings   = st.session_state.get("last_findings")
     last_literature = st.session_state.get("last_literature")
     last_modality   = st.session_state.get("last_modality", "Echo")
 
     if last_findings:
-        with st.spinner("Searching literature and generating response..."):
-            try:
-                from agent import answer_followup
-                result = answer_followup(
-                    question=user_input,
-                    findings=last_findings,
-                    literature=last_literature,
-                    history=st.session_state.messages[:-1],
-                    modality=last_modality,
-                )
-                st.session_state.messages.append({"role": "assistant", "content": result})
-            except Exception as e:
-                import traceback
-                st.session_state.messages.append({
-                    "role":    "assistant",
-                    "content": f"**Error answering follow-up:** `{e}`\n```\n{traceback.format_exc()}\n```",
-                })
+        # Spinner avatar while answer is being generated
+        with st.chat_message("assistant", avatar="spinner"):
+            with st.spinner("Searching literature and generating response..."):
+                try:
+                    from agent import answer_followup
+                    result = answer_followup(
+                        question=user_input,
+                        findings=last_findings,
+                        literature=last_literature,
+                        history=st.session_state.messages[:-1],
+                        modality=last_modality,
+                    )
+                    st.session_state.messages.append({"role": "assistant", "content": result})
+                except Exception as e:
+                    import traceback
+                    result = f"**Error answering follow-up:** `{e}`\n```\n{traceback.format_exc()}\n```"
+                    st.session_state.messages.append({
+                        "role":    "assistant",
+                        "content": result,
+                    })
     elif st.session_state.images:
         st.session_state.messages.append({
             "role":    "assistant",
@@ -1346,8 +1425,8 @@ if user_input:
 #  FOOTER
 # ══════════════════════════════════════════════════════════════
 st.markdown(
-    "<div style='text-align:center;color:#94A3B8;font-size:.72rem;"
-    "padding:1.5rem 0 .5rem;border-top:1px solid #1E293B;margin-top:2rem;line-height:1.9;'>"
+    "<div style='text-align:center;color:var(--mu);font-size:.72rem;"
+    "padding:1.5rem 0 .5rem;border-top:1px solid var(--bd);margin-top:2rem;line-height:1.9;'>"
     "Imaging Evidence &nbsp;·&nbsp; Research preview &nbsp;·&nbsp; "
     "Outputs require clinician verification before any clinical decision."
     "</div>",
