@@ -270,7 +270,7 @@ st.set_page_config(
     page_title="Imaging Evidence",
     page_icon="🩻",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ── DESIGN SYSTEM ─────────────────────────────────────────────
@@ -573,17 +573,32 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
     background: none;
     border: none;
     cursor: pointer;
-    padding: .25rem .35rem;
-    margin-right: .45rem;
+    padding: .4rem .5rem;
+    margin-right: .4rem;
     color: var(--ink);
     flex-shrink: 0;
     line-height: 0;
-    vertical-align: middle;
-    border-radius: 6px;
+    border-radius: 8px;
     transition: background .12s ease;
+    min-width: 40px;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 #sb-hamburger:hover { background: rgba(26,86,219,.1); }
-#sb-hamburger:active { background: rgba(26,86,219,.18); }
+#sb-hamburger:active { background: rgba(26,86,219,.2); }
+
+/* Sidebar backdrop — tapping outside closes sidebar on mobile */
+#sb-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 999;
+    -webkit-tap-highlight-color: transparent;
+}
 
 @media (min-width: 769px) {
     button[data-testid="collapsedControl"],
@@ -595,12 +610,20 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
         margin-left: 0 !important;
         visibility: visible !important;
     }
+    #sb-overlay { display: none !important; }
 }
 
 @media (max-width: 768px) {
     section[data-testid="stSidebar"] {
         min-width: 82vw !important;
         max-width: 85vw !important;
+        z-index: 1000 !important;
+        position: fixed !important;
+        height: 100vh !important;
+        top: 0 !important;
+        left: 0 !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
     }
     .block-container {
         max-width: 100% !important;
@@ -616,7 +639,17 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
     div[data-testid="stChatInput"] { border-radius: var(--rs) !important; }
     #sb-hamburger { display: inline-flex !important; align-items: center; }
     button[data-testid="collapsedControl"],
-    button[data-testid="stSidebarCollapsedControl"] { display: none !important; }
+    button[data-testid="stSidebarCollapsedControl"] {
+        position: fixed !important;
+        top: -9999px !important;
+        left: -9999px !important;
+        width: 1px !important;
+        height: 1px !important;
+        opacity: 0 !important;
+        overflow: hidden !important;
+    }
+    /* Reduce oversized empty-state top padding on mobile */
+    .mobile-empty-state { padding-top: 2rem !important; padding-bottom: 1.5rem !important; }
 }
 @media (max-width: 480px) {
     .block-container {
@@ -626,6 +659,15 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
     div[data-testid="stChatMessage"] p,
     div[data-testid="stChatMessage"] li { font-size: 0.855rem; }
     div[data-testid="stChatInput"] textarea { font-size: 0.875rem !important; }
+    /* Compact status pill */
+    #topbar-status span:last-child { display: none; }
+}
+
+/* Tables: horizontal scroll so they don't break layout on mobile */
+div[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
 }
 
 /* ── THEME TOGGLE BUTTON ────────────────────────────────── */
@@ -657,8 +699,36 @@ _components.html("""
     var par = window.parent || window;
     var pd  = par.document;
 
-    /* ── sidebar auto-open ── */
+    /* ── sidebar helpers ── */
     var isMobile = par.innerWidth <= 768;
+
+    function _sbDispatch(btn) {
+        btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: par}));
+    }
+
+    function _sbIsOpen() {
+        var sb = pd.querySelector('section[data-testid="stSidebar"]');
+        return sb && sb.getBoundingClientRect().left >= -10;
+    }
+
+    function _sbSetOverlay(visible) {
+        var overlay = pd.getElementById('sb-overlay');
+        if (!overlay) {
+            overlay = pd.createElement('div');
+            overlay.id = 'sb-overlay';
+            pd.body.appendChild(overlay);
+            overlay.addEventListener('click', function() {
+                overlay.style.display = 'none';
+                var closeBtn = pd.querySelector('[data-testid="stSidebarNavCollapseButton"]');
+                if (closeBtn) { _sbDispatch(closeBtn); return; }
+                var sb = pd.querySelector('section[data-testid="stSidebar"]');
+                if (sb) { sb.style.transition = 'transform 0.25s ease'; sb.style.transform = 'translateX(-100%)'; }
+            });
+        }
+        overlay.style.display = visible ? 'block' : 'none';
+    }
+
+    /* ── sidebar auto-open on desktop ── */
     if (!isMobile) {
         for (var key in localStorage) {
             if (key.toLowerCase().includes('sidebar')) localStorage.removeItem(key);
@@ -666,21 +736,38 @@ _components.html("""
         function tryOpen() {
             var btn = pd.querySelector('[data-testid="stSidebarCollapsedControl"]') ||
                       pd.querySelector('[data-testid="collapsedControl"]');
-            if (btn) btn.click();
+            if (btn) _sbDispatch(btn);
         }
         setTimeout(tryOpen, 300);
         setTimeout(tryOpen, 800);
     }
+
     if (!par._sbHamburgerWired) {
         par._sbHamburgerWired = true;
         pd.addEventListener('click', function(e) {
             var btn = (e.target.closest ? e.target.closest('#sb-hamburger') : null) ||
                       (e.target.id === 'sb-hamburger' ? e.target : null);
             if (!btn) return;
-            var toggle = pd.querySelector('[data-testid="stSidebarNavCollapseButton"]') ||
-                         pd.querySelector('[data-testid="collapsedControl"]')            ||
-                         pd.querySelector('[data-testid="stSidebarCollapsedControl"]');
-            if (toggle) toggle.click();
+            var isOpen = _sbIsOpen();
+            var toggle;
+            if (isOpen) {
+                toggle = pd.querySelector('[data-testid="stSidebarNavCollapseButton"]');
+            } else {
+                toggle = pd.querySelector('[data-testid="stSidebarCollapsedControl"]') ||
+                         pd.querySelector('[data-testid="collapsedControl"]');
+            }
+            if (toggle) {
+                _sbDispatch(toggle);
+            } else {
+                /* Fallback: directly slide the sidebar */
+                var sb = pd.querySelector('section[data-testid="stSidebar"]');
+                if (sb) {
+                    sb.style.transition = 'transform 0.25s ease';
+                    sb.style.transform = isOpen ? 'translateX(-100%)' : 'translateX(0)';
+                }
+            }
+            /* Show/hide backdrop overlay on mobile */
+            if (par.innerWidth <= 768) _sbSetOverlay(!isOpen);
         });
     }
 
@@ -1062,7 +1149,7 @@ function finalize(){
 </script>
 """, height=370)
 
-    st.session_state["flow_selection"] = "Flow A - Groq Vision  (cloud · instant)"
+    st.session_state["flow_selection"] = "Flow A"
 
     _total_imgs = len(st.session_state.images) + len(st.session_state.cam_images)
     st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
@@ -1093,8 +1180,6 @@ function finalize(){
             st.markdown(f"**{MODALITY_ICONS.get(m,'')} {m}**  \n{MODALITY_HINTS.get(m,'')}\n")
 
     st.markdown(
-        "<div style='font-size:.68rem;color:#3B82F6;text-align:center;"
-        "margin-top:.7rem;font-weight:500;'>&#9711; Groq Cloud · instant</div>"
         "<div style='font-size:.65rem;color:#7EAAD4;text-align:center;"
         "line-height:1.75;margin-top:.4rem;'>"
         "Clinician review required · Not a diagnostic device"
@@ -1123,21 +1208,20 @@ if n_views > 0:
 
 st.markdown(
     f"<div style='display:flex;align-items:center;justify-content:space-between;"
-    f"padding:.8rem 0 1rem 0;border-bottom:1px solid var(--bd);margin-bottom:0;'>"
-    f"<div style='display:flex;align-items:center;'>"
+    f"padding:.8rem 0 1rem 0;border-bottom:1px solid var(--bd);margin-bottom:0;gap:.5rem;'>"
+    f"<div style='display:flex;align-items:center;min-width:0;flex:1;overflow:hidden;'>"
     f"<button id='sb-hamburger' aria-label='Toggle menu'>"
     f"<svg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'>"
     f"<path d='M2.5 5h15M2.5 10h15M2.5 15h15' stroke='currentColor' stroke-width='1.75' stroke-linecap='round'/>"
     f"</svg></button>"
-    f"<div style='font-size:1rem;font-weight:700;color:#1A56DB;letter-spacing:-.02em;'>"
+    f"<div style='font-size:1rem;font-weight:700;color:#1A56DB;letter-spacing:-.02em;"
+    f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"
     f"Imaging<span style='color:#3B82F6'>.</span>Evidence"
     f"<span style='font-size:.72rem;color:var(--mu);font-weight:400;margin-left:.6rem;'>"
     f"{MODALITY_ICONS.get(modality,'')} {modality}</span></div>"
     f"</div>"
-    f"<div style='display:flex;align-items:center;gap:.5rem;'>{_status}"
-    f"<span style='background:var(--s2);border:1px solid var(--bd2);color:var(--mu);"
-    f"font-size:.7rem;font-weight:500;padding:.2rem .6rem;border-radius:999px;'>"
-    f"Groq Vision</span>"
+    f"<div style='display:flex;align-items:center;gap:.4rem;flex-shrink:0;'>"
+    f"<span id='topbar-status'>{_status}</span>"
     f"<button id='theme-toggle' title='Toggle dark / light mode'>"
     f"<svg id='icon-moon' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
     f"<path d='M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z'/></svg>"
@@ -1164,7 +1248,7 @@ _AVATAR = {
 if not st.session_state.messages:
     chips = EMPTY_STATE_CHIPS.get(modality, EMPTY_STATE_CHIPS["Echo"])
     st.markdown(
-        "<div style='text-align:center;padding:4.5rem 1rem 3rem;'>"
+        "<div class='mobile-empty-state' style='text-align:center;padding:4.5rem 1rem 3rem;'>"
         f"<div style='font-size:2rem;opacity:.2;margin-bottom:1.2rem;'>{MODALITY_ICONS.get(modality,'🩻')}</div>"
         "<div style='font-size:1.45rem;font-weight:600;color:var(--ink);"
         "letter-spacing:-.025em;margin-bottom:.55rem;'>"
@@ -1202,7 +1286,7 @@ else:
                 st.markdown(f"### {_mod} Report - {_nv} image{'s' if _nv != 1 else ''} - Compare Mode")
                 st.markdown(
                     "<div style='font-size:.78rem;color:var(--mu);margin:.15rem 0 1rem;'>"
-                    "Stage 1 descriptions - Flow A (Groq Vision) vs Flow B (MedGemma)"
+                    "Stage 1 descriptions - Flow A vs Flow B (MedGemma)"
                     "</div>",
                     unsafe_allow_html=True,
                 )
@@ -1213,7 +1297,7 @@ else:
                         "border-radius:8px;padding:.55rem .85rem .4rem;margin-bottom:.55rem;'>"
                         "<span style='font-size:.68rem;font-weight:700;color:var(--ac);"
                         "text-transform:uppercase;letter-spacing:.09em;'>"
-                        "Flow A - Groq Vision</span></div>",
+                        "Flow A</span></div>",
                         unsafe_allow_html=True,
                     )
                     st.markdown(msg.get("findings_a", "_No output_"))
@@ -1316,7 +1400,7 @@ if analyze_clicked and st.session_state.images:
         # Spinner avatar signals "AI is working"
         with st.chat_message("assistant", avatar="spinner"):
             with st.status("Running 3-stage analysis pipeline...", expanded=True) as status:
-                st.write(f"Stage 1 — Analysing {modality} with Groq Vision...")
+                st.write(f"Stage 1 — Analysing {modality} images...")
                 findings = run_groq_vision(st.session_state.images, question, modality)
                 st.write(f"Stage 1 complete — {len(findings)} chars")
 
@@ -1327,7 +1411,7 @@ if analyze_clicked and st.session_state.images:
                 n_sch = len(literature.get("scholar", []))
                 st.write(f"Stage 2 complete — {n_pub} PubMed + {n_pmc} PMC + {n_sch} Scholar")
 
-                st.write("Stage 3 — Synthesizing with Groq / LLaMA-3...")
+                st.write("Stage 3 — Synthesizing report...")
                 synthesis = run_synthesis(findings, literature, modality)
                 st.write("Stage 3 complete — report generated")
                 status.update(label="Analysis complete ✓", state="complete", expanded=False)
@@ -1343,7 +1427,7 @@ if analyze_clicked and st.session_state.images:
         st.session_state.messages.append({
             "role":    "assistant",
             "content": (
-                f"### {modality} Report — {n} image{'s' if n > 1 else ''} · Groq Vision\n\n"
+                f"### {modality} Report — {n} image{'s' if n > 1 else ''}\n\n"
                 f"{synthesis}\n\n"
                 f"---\n"
                 f"*Sources: {n_papers} papers retrieved from PubMed · PubMed Central · Semantic Scholar*"
