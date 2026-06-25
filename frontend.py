@@ -619,6 +619,39 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
     }
     .mobile-empty-state { padding-top: 2rem !important; padding-bottom: 1.5rem !important; }
 }
+/* ── MOBILE SIDEBAR COMPACT + STICKY ANALYZE ───────────────── */
+@media (max-width: 768px) {
+    /* Remove subtitle to save ~20px */
+    #sb-brand-sub { display: none !important; }
+
+    /* Compact brand block */
+    #sb-brand {
+        padding-bottom: .55rem !important;
+        margin-bottom: .35rem !important;
+    }
+
+    /* Reduce sidebar inner top padding */
+    section[data-testid="stSidebar"] > div:first-child {
+        padding-top: 0.75rem !important;
+    }
+
+    /* Sticky Analyze / Add-to-Study button — always visible at bottom */
+    section[data-testid="stSidebar"] .stButton:has(button[kind="primary"]) {
+        position: sticky !important;
+        bottom: 0 !important;
+        z-index: 10 !important;
+        /* fade from transparent to sidebar bg so content beneath looks clean */
+        background: linear-gradient(
+            to bottom,
+            rgba(30,58,95,0) 0%,
+            var(--sb) 32%
+        ) !important;
+        padding-bottom: .6rem !important;
+        padding-top: .55rem !important;
+        margin-top: .1rem !important;
+    }
+}
+
 @media (max-width: 480px) {
     #ie-topbar {
         padding: 0.55rem 0.4rem 0.6rem !important;
@@ -967,11 +1000,11 @@ with st.sidebar:
 
     # ── brand ──
     st.markdown(
-        "<div style='padding-bottom:1.1rem;margin-bottom:.6rem;"
+        "<div id='sb-brand' style='padding-bottom:1.1rem;margin-bottom:.6rem;"
         "border-bottom:1px solid #2E4F7E;'>"
         "<div style='font-size:1.15rem;font-weight:700;color:#E0EEFF;"
         "letter-spacing:-.025em;'>Imaging<span style='color:#3B82F6'>.</span>Evidence</div>"
-        "<div style='font-size:.72rem;color:#7EAAD4;margin-top:.15rem;'>"
+        "<div id='sb-brand-sub' style='font-size:.72rem;color:#7EAAD4;margin-top:.15rem;'>"
         "Multimodal cardiac imaging AI</div>"
         "</div>",
         unsafe_allow_html=True,
