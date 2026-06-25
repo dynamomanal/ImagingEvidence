@@ -635,12 +635,53 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
         padding-top: 0.75rem !important;
     }
 
+    /* ── Sidebar close button: replace << with ← Close ── */
+    section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"] {
+        background: rgba(46,79,126,.3) !important;
+        border: 1px solid #2E4F7E !important;
+        border-radius: 8px !important;
+        height: 34px !important;
+        min-width: 82px !important;
+        width: auto !important;
+        padding: 0 .75rem !important;
+        margin-bottom: .55rem !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: .3rem !important;
+        cursor: pointer !important;
+        transition: background .12s ease, border-color .12s ease !important;
+    }
+    section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"]:hover {
+        background: rgba(59,130,246,.15) !important;
+        border-color: rgba(59,130,246,.4) !important;
+    }
+    /* Hide the default << double-chevron SVG */
+    section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"] svg {
+        display: none !important;
+    }
+    /* ← arrow */
+    section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"]::before {
+        content: '←';
+        font-size: 14px;
+        color: #BFDBFE;
+        line-height: 1;
+    }
+    /* Close label */
+    section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"]::after {
+        content: 'Close';
+        font-size: .73rem;
+        font-weight: 600;
+        letter-spacing: .04em;
+        color: #BFDBFE;
+        text-transform: uppercase;
+    }
+
     /* Sticky Analyze / Add-to-Study button — always visible at bottom */
     section[data-testid="stSidebar"] .stButton:has(button[kind="primary"]) {
         position: sticky !important;
         bottom: 0 !important;
         z-index: 10 !important;
-        /* fade from transparent to sidebar bg so content beneath looks clean */
         background: linear-gradient(
             to bottom,
             rgba(30,58,95,0) 0%,
