@@ -635,46 +635,36 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
         padding-top: 0.75rem !important;
     }
 
-    /* ── Sidebar close button: replace << with ← Close ── */
+    /* ── Replace << with ✕ on the sidebar close button ── */
     section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"] {
-        background: rgba(46,79,126,.3) !important;
-        border: 1px solid #2E4F7E !important;
-        border-radius: 8px !important;
+        width: 34px !important;
         height: 34px !important;
-        min-width: 82px !important;
-        width: auto !important;
-        padding: 0 .75rem !important;
-        margin-bottom: .55rem !important;
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: .3rem !important;
+        min-width: 34px !important;
+        border-radius: 8px !important;
+        background: rgba(255,255,255,.08) !important;
+        border: 1px solid rgba(191,219,254,.18) !important;
+        padding: 0 !important;
         cursor: pointer !important;
-        transition: background .12s ease, border-color .12s ease !important;
+        position: relative !important;
+        overflow: hidden !important;
+        margin-bottom: .5rem !important;
     }
-    section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"]:hover {
-        background: rgba(59,130,246,.15) !important;
-        border-color: rgba(59,130,246,.4) !important;
-    }
-    /* Hide the default << double-chevron SVG */
-    section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"] svg {
+    /* hide every child (the << SVG) */
+    section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"] * {
         display: none !important;
     }
-    /* ← arrow */
-    section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"]::before {
-        content: '←';
-        font-size: 14px;
-        color: #BFDBFE;
-        line-height: 1;
-    }
-    /* Close label */
+    /* draw ✕ via pseudo-element — no DOM/event interference */
     section[data-testid="stSidebar"] button[data-testid="stSidebarNavCollapseButton"]::after {
-        content: 'Close';
-        font-size: .73rem;
-        font-weight: 600;
-        letter-spacing: .04em;
-        color: #BFDBFE;
-        text-transform: uppercase;
+        content: '\00D7' !important;
+        display: block !important;
+        font-size: 20px !important;
+        font-weight: 300 !important;
+        color: #BFDBFE !important;
+        line-height: 1 !important;
+        position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
     }
 
     /* Sticky Analyze / Add-to-Study button — always visible at bottom */
@@ -972,6 +962,7 @@ _components.html("""
             if (overlay) overlay.style.display = 'none';
         });
     }
+
 
     /* ── theme toggle ── */
     function syncIcons(dark) {
