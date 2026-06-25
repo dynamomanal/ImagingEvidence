@@ -618,16 +618,26 @@ def run_synthesis(findings: str, literature: dict, modality: str = "Echo") -> st
     )
 
     client = Groq(api_key=api_key)
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": SYNTHESIS_SYSTEM},
-            {"role": "user",   "content": user_message},
-        ],
-        max_tokens=1400,
-        temperature=0.15,
+    for _model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
+        try:
+            response = client.chat.completions.create(
+                model=_model,
+                messages=[
+                    {"role": "system", "content": SYNTHESIS_SYSTEM},
+                    {"role": "user",   "content": user_message},
+                ],
+                max_tokens=1400,
+                temperature=0.15,
+            )
+            return response.choices[0].message.content
+        except Exception as _e:
+            last_err = _e
+            continue
+    return (
+        f"_Report synthesis unavailable ({last_err}). "
+        "Raw image findings below:_\n\n"
+        f"{findings}"
     )
-    return response.choices[0].message.content
 
 
 # ══════════════════════════════════════════════════════════════

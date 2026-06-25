@@ -23,81 +23,31 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 #  MODALITY CONFIG
 # ══════════════════════════════════════════════════════════════
 
-MODALITIES = ["Echo", "Cardiac MRI", "Cardiac CT"]
+MODALITIES = ["Echocardiogram", "MRI", "CT Scan"]
 
 MODALITY_ICONS = {
-    "Echo":        "🫀",
-    "Cardiac MRI": "🧲",
-    "Cardiac CT":  "💠",
-}
-
-MODALITY_VIEWS = {
-    "Echo": [
-        "Not specified",
-        "Parasternal Long Axis (PLAX)",
-        "Parasternal Short Axis (PSAX)",
-        "Apical 4-Chamber (A4C)",
-        "Apical 2-Chamber (A2C)",
-        "Apical 3-Chamber (A3C)",
-        "Apical 5-Chamber (A5C)",
-        "Subcostal 4-Chamber",
-        "Subcostal IVC",
-        "Suprasternal",
-        "Tissue Doppler (TDI)",
-        "Colour Doppler",
-        "Spectral Doppler (PW/CW)",
-        "M-Mode",
-        "Other",
-    ],
-    "Cardiac MRI": [
-        "Not specified",
-        "Cine 4-Chamber",
-        "Cine 2-Chamber",
-        "Cine 3-Chamber (LVOT)",
-        "Cine Short Axis",
-        "Late Gadolinium Enhancement (LGE)",
-        "T1 Mapping",
-        "T2 Mapping / STIR",
-        "Phase Contrast Flow",
-        "First-Pass Perfusion",
-        "Aortic / Great Vessels",
-        "Right Heart",
-        "Other",
-    ],
-    "Cardiac CT": [
-        "Not specified",
-        "Axial — Coronary",
-        "Coronal MPR",
-        "Sagittal MPR",
-        "Curved MPR — LAD",
-        "Curved MPR — LCX",
-        "Curved MPR — RCA",
-        "3D Volume Rendering",
-        "Calcium Score",
-        "Pericardium",
-        "Pulmonary Veins",
-        "Aorta / TAVR Planning",
-        "Other",
-    ],
+    "Echocardiogram": "🫀",
+    "MRI":            "🧲",
+    "CT Scan":        "💠",
 }
 
 MODALITY_HINTS = {
-    "Echo":        "JPG PNG GIF MP4 AVI · DICOM (.dcm)",
-    "Cardiac MRI": "DICOM (.dcm) · JPG PNG · multi-frame cine supported",
-    "Cardiac CT":  "DICOM (.dcm) · JPG PNG · CT windowing applied automatically",
+    "Echocardiogram": "JPG · PNG · GIF · MP4 · AVI · DICOM",
+    "MRI":            "DICOM · JPG · PNG",
+    "CT Scan":        "DICOM · JPG · PNG",
 }
 
 EMPTY_STATE_CHIPS = {
-    "Echo": [
-        "Integrated multi-view report", "LV function &amp; EF",
-        "Valvular disease", "Doppler interpretation", "Differential diagnosis",
+    "Echocardiogram": [
+        "Full cardiac report", "LV function & EF",
+        "Valve assessment", "Doppler analysis", "Differential diagnosis",
     ],
-    "Cardiac MRI": [
-        "LGE scar pattern", "Volumes &amp; EF", "T1 / T2 tissue mapping",
-        "Myocarditis vs ischemia", "Cardiomyopathy workup",
+    "MRI": [
+        "LGE scar pattern", "Volumes & EF", "Tissue mapping",
+        "Myocarditis vs ischemia", "Cardiomyopathy",
     ],
-    "Cardiac CT": [
-        "Coronary stenosis grading", "Calcium score", "Plaque morphology",
+    "CT Scan": [
+        "Coronary stenosis", "Calcium score", "Plaque morphology",
         "Aortic dimensions", "Incidental findings",
     ],
 }
@@ -345,12 +295,17 @@ html, body, [class*="css"], .stApp {
     color: var(--ink) !important;
     -webkit-font-smoothing: antialiased !important;
 }
-#MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; }
+/* Remove Streamlit's native header entirely — no space, no padding offset */
+#MainMenu, footer,
+header[data-testid="stHeader"],
+[data-testid="stDecoration"] { display: none !important; }
+[data-testid="stAppViewBlockContainer"] { padding-top: 0 !important; }
+[data-testid="stBottom"] { padding-bottom: 0 !important; }
 
 .block-container {
     max-width: 820px !important;
     padding: 0 1.8rem 2rem !important;
-    padding-top: 1.4rem !important;
+    padding-top: 1rem !important;
     margin: 0 auto !important;
 }
 
@@ -614,6 +569,18 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
 }
 
 @media (max-width: 768px) {
+    /* Topbar: fixed at top of viewport, always visible */
+    #ie-topbar {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 100 !important;
+        background: var(--bg) !important;
+        padding: 0.55rem 0.75rem 0.6rem !important;
+        border-bottom: 1px solid var(--bd) !important;
+        margin-bottom: 0 !important;
+    }
     section[data-testid="stSidebar"] {
         min-width: 82vw !important;
         max-width: 85vw !important;
@@ -624,11 +591,13 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
         left: 0 !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
+        transition: none !important;
     }
     .block-container {
         max-width: 100% !important;
         padding: 0 0.75rem 1.5rem !important;
-        padding-top: 0.75rem !important;
+        /* Reserve space for fixed topbar (~52px) */
+        padding-top: 3.6rem !important;
     }
     div[data-testid="stChatMessage"] { padding: 0.85rem 0 !important; }
     div[data-testid="stChatMessage"] p,
@@ -648,18 +617,19 @@ hr { border-color: var(--bd2) !important; margin: 0.75rem 0 !important; }
         opacity: 0 !important;
         overflow: hidden !important;
     }
-    /* Reduce oversized empty-state top padding on mobile */
     .mobile-empty-state { padding-top: 2rem !important; padding-bottom: 1.5rem !important; }
 }
 @media (max-width: 480px) {
+    #ie-topbar {
+        padding: 0.55rem 0.4rem 0.6rem !important;
+    }
     .block-container {
         padding: 0 0.4rem 1rem !important;
-        padding-top: 0.5rem !important;
+        padding-top: 3.6rem !important;
     }
     div[data-testid="stChatMessage"] p,
     div[data-testid="stChatMessage"] li { font-size: 0.855rem; }
     div[data-testid="stChatInput"] textarea { font-size: 0.875rem !important; }
-    /* Compact status pill */
     #topbar-status span:last-child { display: none; }
 }
 
@@ -771,6 +741,28 @@ _components.html("""
         });
     }
 
+    /* ── overlay auto-sync: hide overlay whenever sidebar closes via any means ── */
+    if (!par._sbOverlaySyncId) {
+        par._sbOverlaySyncId = setInterval(function() {
+            if (par.innerWidth > 768) return;
+            var overlay = pd.getElementById('sb-overlay');
+            if (!overlay || overlay.style.display !== 'block') return;
+            if (!_sbIsOpen()) overlay.style.display = 'none';
+        }, 180);
+    }
+
+    /* ── instant overlay close when native sidebar << button is clicked ── */
+    if (!par._sbNativeCloseWired) {
+        par._sbNativeCloseWired = true;
+        pd.addEventListener('click', function(e) {
+            if (par.innerWidth > 768) return;
+            var closeBtn = e.target.closest ? e.target.closest('[data-testid="stSidebarNavCollapseButton"]') : null;
+            if (!closeBtn) return;
+            var overlay = pd.getElementById('sb-overlay');
+            if (overlay) overlay.style.display = 'none';
+        });
+    }
+
     /* ── theme toggle ── */
     function syncIcons(dark) {
         var moon = pd.getElementById('icon-moon');
@@ -814,11 +806,11 @@ _defaults = {
     "cam_images":       [],
     "cam_names":        [],
     "cam_labels":       [],
-    "modality":         "Echo",
+    "modality":         "Echocardiogram",
     "history":          [],
     "last_findings":    None,
     "last_literature":  None,
-    "last_modality":    "Echo",
+    "last_modality":    "Echocardiogram",
 }
 for _k, _v in _defaults.items():
     if _k not in st.session_state:
@@ -859,14 +851,12 @@ with st.sidebar:
         st.rerun()
 
     # ── modality ──
-    _sb_label("Imaging modality")
     selected_modality = st.selectbox(
-        "modality",
+        "Modality",
         options=MODALITIES,
         index=MODALITIES.index(st.session_state.modality),
         format_func=lambda m: f"{MODALITY_ICONS.get(m,'')}  {m}",
         key="modality_select",
-        label_visibility="collapsed",
     )
     if selected_modality != st.session_state.modality:
         st.session_state.modality    = selected_modality
@@ -875,12 +865,9 @@ with st.sidebar:
         st.session_state.view_labels = []
         st.rerun()
 
-    modality     = st.session_state.modality
-    view_options = MODALITY_VIEWS.get(modality, ["Not specified", "Other"])
+    modality = st.session_state.modality
 
     # ── upload ──
-    _sb_label(f"{MODALITY_ICONS.get(modality,'')} {modality} images")
-
     uploaded_files = st.file_uploader(
         "upload",
         type=["jpg","jpeg","png","tiff","gif","mp4","avi","mov","webm","dcm","dicom"],
@@ -931,58 +918,43 @@ with st.sidebar:
                     try:
                         dcm_frames = _dicom_frame_count(raw)
                         if dcm_frames > 1:
-                            st.caption(f"Multi-frame DICOM · {dcm_frames} frames")
                             n_extract = st.slider(
                                 "Frames to extract",
                                 min_value=1, max_value=min(dcm_frames, 12),
                                 value=min(4, dcm_frames), key=f"dcm_nf_{i}",
-                                help="Evenly sampled across the series.",
                             )
-                            with st.spinner("Reading DICOM frames..."):
+                            with st.spinner("Loading..."):
                                 frames, total_f, meta = extract_dicom_frames(raw, n_extract)
                             thumb_cols = st.columns(len(frames))
                             for fi, (col, frame) in enumerate(zip(thumb_cols, frames)):
                                 with col:
-                                    st.image(frame, width="stretch", caption=f"f{fi+1}")
+                                    st.image(frame, width="stretch", caption=f"Frame {fi+1}")
                             for fi, frame in enumerate(frames):
                                 st.session_state.images.append(frame)
                                 st.session_state.img_names.append(
                                     f"{f.name} [frame {fi+1}/{len(frames)}]"
                                 )
                             n_added = len(frames)
-                            desc    = meta.get("series_desc", "")
-                            dicom_m = meta.get("modality", "")
-                            st.caption(
-                                f"{len(raw)/1024:.1f} KB · {total_f} frames · {n_extract} extracted"
-                                + (f" · {dicom_m}" if dicom_m else "")
-                                + (f" · {desc}" if desc else "")
-                            )
+                            st.caption(f"DICOM · {n_extract} of {total_f} frames")
                         else:
-                            with st.spinner("Reading DICOM..."):
+                            with st.spinner("Loading..."):
                                 img, meta = _dicom_to_pil(raw, frame_idx=0)
                             st.image(img, width="stretch")
                             st.session_state.images.append(img)
                             st.session_state.img_names.append(f.name)
                             n_added = 1
-                            desc    = meta.get("series_desc", "")
-                            dicom_m = meta.get("modality", "")
-                            st.caption(
-                                f"{len(raw)/1024:.1f} KB · {meta['rows']}x{meta['cols']}px"
-                                + (f" · {dicom_m}" if dicom_m else "")
-                                + (f" · {desc}" if desc else "")
-                            )
+                            st.caption("DICOM")
                     except Exception as e:
                         st.error(f"Could not read DICOM: {e}")
                         n_added = 0
 
                 # ── ANIMATED GIF ───────────────────────────────────────
                 elif is_animated:
-                    st.image(raw, width="stretch", caption=f"Animated GIF · {n_total} frames")
+                    st.image(raw, width="stretch")
                     n_extract = st.slider(
                         "Frames to extract",
                         min_value=1, max_value=min(n_total, 8),
                         value=min(4, n_total), key=f"gif_nf_{i}",
-                        help="Sampled evenly across the cardiac cycle.",
                     )
                     frames = extract_gif_frames(raw, n_extract)
                     for fi, frame in enumerate(frames):
@@ -991,7 +963,7 @@ with st.sidebar:
                             f"{f.name} [frame {fi+1}/{n_extract}]"
                         )
                     n_added = n_extract
-                    st.caption(f"{len(raw)/1024:.1f} KB · {n_total} frames · {n_extract} extracted")
+                    st.caption(f"GIF · {n_extract} of {n_total} frames")
 
                 # ── VIDEO ──────────────────────────────────────────────
                 elif is_video:
@@ -1000,9 +972,8 @@ with st.sidebar:
                         "Frames to extract",
                         min_value=1, max_value=8,
                         value=4, key=f"vid_nf_{i}",
-                        help="Evenly sampled from the full video duration.",
                     )
-                    with st.spinner("Extracting frames..."):
+                    with st.spinner("Loading..."):
                         try:
                             frames, n_total_vid = extract_video_frames(raw, f.name, n_extract)
                         except Exception as e:
@@ -1012,44 +983,36 @@ with st.sidebar:
                         thumb_cols = st.columns(len(frames))
                         for fi, (col, frame) in enumerate(zip(thumb_cols, frames)):
                             with col:
-                                st.image(frame, width="stretch", caption=f"f{fi+1}")
+                                st.image(frame, width="stretch", caption=f"Frame {fi+1}")
                         for fi, frame in enumerate(frames):
                             st.session_state.images.append(frame)
                             st.session_state.img_names.append(
                                 f"{f.name} [frame {fi+1}/{len(frames)}]"
                             )
                     n_added = len(frames)
-                    st.caption(
-                        f"{len(raw)/1024:.1f} KB · {n_total_vid} total frames · {n_added} extracted"
-                    )
+                    st.caption(f"Video · {n_added} frames extracted")
 
                 # ── STATIC IMAGE ───────────────────────────────────────
                 else:
-                    img = Image.open(io.BytesIO(raw)).convert("RGB")
-                    st.session_state.images.append(img)
-                    st.session_state.img_names.append(f.name)
-                    st.image(img, width="stretch")
-                    n_added = 1
-                    st.caption(f"{len(raw)/1024:.1f} KB · {img.size[0]}x{img.size[1]}px")
+                    try:
+                        img = Image.open(io.BytesIO(raw)).convert("RGB")
+                        st.session_state.images.append(img)
+                        st.session_state.img_names.append(f.name)
+                        st.image(img, width="stretch")
+                        n_added = 1
+                    except Exception as e:
+                        st.error(f"Could not read image '{f.name}': {e}")
+                        n_added = 0
 
-                # ── view label ──
-                label = st.selectbox(
-                    "view / series",
-                    view_options,
-                    key=f"vl_{i}",
-                    label_visibility="collapsed",
-                )
-                all_labels.extend([label] * n_added)
+                all_labels.extend([modality] * n_added)
 
         st.session_state.view_labels = all_labels
 
     # ── live capture ──
-    _sb_label("📷 Capture or record directly")
-    with st.expander("No image file? Capture here", expanded=False):
-        _cap_tab, _rec_tab = st.tabs(["📷 Photo frames", "🎬 Record video"])
+    with st.expander("📷 Capture with camera", expanded=False):
+        _cap_tab, _rec_tab = st.tabs(["Photo", "Record video"])
 
         with _cap_tab:
-            st.caption("Take one or more echo frames with your device camera.")
             _cam_pic = st.camera_input(
                 "Take frame", label_visibility="collapsed", key="cam_snapshot"
             )
@@ -1062,7 +1025,7 @@ with st.sidebar:
                     _cam_idx = len(st.session_state.cam_images) + 1
                     st.session_state.cam_images.append(_cam_img)
                     st.session_state.cam_names.append(f"camera_frame_{_cam_idx}.jpg")
-                    st.session_state.cam_labels.append(view_options[0])
+                    st.session_state.cam_labels.append(modality)
             if st.session_state.cam_images:
                 _n_cam = len(st.session_state.cam_images)
                 st.markdown(
@@ -1155,36 +1118,10 @@ function finalize(){
     st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
 
     analyze_clicked = st.button(
-        f"Analyze {MODALITY_ICONS.get(modality,'')}  ->",
+        "Analyze",
         use_container_width=True,
         type="primary",
         disabled=_total_imgs == 0,
-    )
-
-    # ── session history ──
-    if st.session_state.history:
-        _sb_label("This session")
-        for entry in reversed(st.session_state.history[-6:]):
-            _icon = MODALITY_ICONS.get(entry.get("modality", "Echo"), "🩻")
-            st.markdown(
-                f"<div style='padding:.38rem .55rem;border-radius:5px;font-size:.8rem;"
-                f"color:#7EAAD4;background:#142240;margin-bottom:.22rem;"
-                f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"
-                f"{_icon} {entry['label']}</div>",
-                unsafe_allow_html=True,
-            )
-
-    st.markdown("---")
-    with st.expander("Supported modalities", expanded=False):
-        for m in MODALITIES:
-            st.markdown(f"**{MODALITY_ICONS.get(m,'')} {m}**  \n{MODALITY_HINTS.get(m,'')}\n")
-
-    st.markdown(
-        "<div style='font-size:.65rem;color:#7EAAD4;text-align:center;"
-        "line-height:1.75;margin-top:.4rem;'>"
-        "Clinician review required · Not a diagnostic device"
-        "</div>",
-        unsafe_allow_html=True,
     )
 
 
@@ -1207,7 +1144,7 @@ if n_views > 0:
     )
 
 st.markdown(
-    f"<div style='display:flex;align-items:center;justify-content:space-between;"
+    f"<div id='ie-topbar' style='display:flex;align-items:center;justify-content:space-between;"
     f"padding:.8rem 0 1rem 0;border-bottom:1px solid var(--bd);margin-bottom:0;gap:.5rem;'>"
     f"<div style='display:flex;align-items:center;min-width:0;flex:1;overflow:hidden;'>"
     f"<button id='sb-hamburger' aria-label='Toggle menu'>"
@@ -1246,7 +1183,7 @@ _AVATAR = {
 }
 
 if not st.session_state.messages:
-    chips = EMPTY_STATE_CHIPS.get(modality, EMPTY_STATE_CHIPS["Echo"])
+    chips = EMPTY_STATE_CHIPS.get(modality, EMPTY_STATE_CHIPS["Echocardiogram"])
     st.markdown(
         "<div class='mobile-empty-state' style='text-align:center;padding:4.5rem 1rem 3rem;'>"
         f"<div style='font-size:2rem;opacity:.2;margin-bottom:1.2rem;'>{MODALITY_ICONS.get(modality,'🩻')}</div>"
@@ -1255,8 +1192,7 @@ if not st.session_state.messages:
         f"Upload a {modality} study</div>"
         "<div style='font-size:.9rem;color:var(--mu);max-width:380px;"
         "margin:0 auto 2.5rem;line-height:1.65;'>"
-        f"Add one or more {modality} images from the left panel, "
-        "then run the analysis to receive a guideline-referenced cardiac report."
+        "Upload your imaging files, then tap <strong>Analyze</strong> to generate a clinical report."
         "</div>"
         "<div style='display:flex;flex-wrap:wrap;gap:.45rem;"
         "justify-content:center;max-width:520px;margin:0 auto;'>",
@@ -1280,61 +1216,7 @@ else:
                     with cols[idx % 4]:
                         st.image(im, caption=nm, width="stretch")
 
-            if msg.get("is_compare"):
-                _nv  = msg.get("n_views", "?")
-                _mod = msg.get("modality", "Cardiac")
-                st.markdown(f"### {_mod} Report - {_nv} image{'s' if _nv != 1 else ''} - Compare Mode")
-                st.markdown(
-                    "<div style='font-size:.78rem;color:var(--mu);margin:.15rem 0 1rem;'>"
-                    "Stage 1 descriptions - Flow A vs Flow B (MedGemma)"
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
-                _col_a, _col_b = st.columns(2, gap="medium")
-                with _col_a:
-                    st.markdown(
-                        "<div style='background:var(--acl);border:1px solid var(--acm);"
-                        "border-radius:8px;padding:.55rem .85rem .4rem;margin-bottom:.55rem;'>"
-                        "<span style='font-size:.68rem;font-weight:700;color:var(--ac);"
-                        "text-transform:uppercase;letter-spacing:.09em;'>"
-                        "Flow A</span></div>",
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(msg.get("findings_a", "_No output_"))
-                with _col_b:
-                    _b_err = msg.get("findings_b_error", False)
-                    if _b_err:
-                        st.markdown(
-                            "<div style='background:#451A03;border:1px solid #92400E;"
-                            "border-radius:8px;padding:.55rem .85rem .4rem;margin-bottom:.55rem;'>"
-                            "<span style='font-size:.68rem;font-weight:700;color:#FCD34D;"
-                            "text-transform:uppercase;letter-spacing:.09em;'>"
-                            "Flow B - MedGemma &#9888;</span></div>",
-                            unsafe_allow_html=True,
-                        )
-                        st.warning(msg.get("findings_b", "_No output_"))
-                    else:
-                        st.markdown(
-                            "<div style='background:var(--s2);border:1px solid var(--bd);"
-                            "border-radius:8px;padding:.55rem .85rem .4rem;margin-bottom:.55rem;'>"
-                            "<span style='font-size:.68rem;font-weight:700;color:var(--mu);"
-                            "text-transform:uppercase;letter-spacing:.09em;'>"
-                            "Flow B - MedGemma</span></div>",
-                            unsafe_allow_html=True,
-                        )
-                        st.markdown(msg.get("findings_b", "_No output_"))
-                st.markdown("---")
-                st.markdown(
-                    "<div style='font-size:.68rem;font-weight:700;color:var(--mu);"
-                    "text-transform:uppercase;letter-spacing:.09em;margin:.5rem 0 .3rem;'>"
-                    "Synthesis - Based on Flow A findings</div>",
-                    unsafe_allow_html=True,
-                )
-                st.markdown(msg["content"])
-                _np = msg.get("n_papers", 0)
-                st.markdown(f"*Sources: {_np} papers retrieved from PubMed · PubMed Central*")
-            else:
-                st.markdown(msg["content"])
+            st.markdown(msg["content"])
 
     _components.html("""
 <script>
@@ -1354,41 +1236,20 @@ else:
 if analyze_clicked and st.session_state.images:
     n        = len(st.session_state.images)
     modality = st.session_state.modality
-    labels   = st.session_state.get("view_labels", ["Not specified"] * n)
-    icon     = MODALITY_ICONS.get(modality, "")
 
-    view_desc = ", ".join(f"Image {i+1} ({labels[i]})" for i in range(n))
-    question  = (
-        f"I am providing {n} {modality} image{'s' if n > 1 else ''} for analysis: {view_desc}. "
-        f"Please analyze all images and provide a comprehensive {modality} report."
+    question = (
+        f"Please analyze {'these' if n > 1 else 'this'} {n} {modality} "
+        f"image{'s' if n > 1 else ''} and provide a comprehensive clinical report."
     )
 
-    short = (labels[0] if labels and labels[0] != "Not specified" else modality)
-    if n > 1:
-        short += f" +{n - 1} more"
-    st.session_state.history.append({"label": short, "n": n, "modality": modality})
+    st.session_state.history.append({"label": modality, "n": n, "modality": modality})
 
     st.session_state.messages.append({
-        "role":      "user",
-        "content":   (
-            f"**{n} {modality} image{'s' if n > 1 else ''} submitted for analysis.**\n\n"
-            f"_{view_desc}_"
-        ),
-        "images":    list(st.session_state.images),
-        "img_names": [f"{labels[i]} - {st.session_state.img_names[i]}" for i in range(n)],
+        "role":    "user",
+        "content": f"**{n} {modality} image{'s' if n > 1 else ''} submitted for analysis.**",
+        "images":  list(st.session_state.images),
+        "img_names": list(st.session_state.img_names),
     })
-
-    # Render the user message immediately so the user sees it while pipeline runs
-    with st.chat_message("user", avatar=_AVATAR["user"]):
-        _imgs_now = st.session_state.messages[-1]["images"]
-        if _imgs_now:
-            _cols_now = st.columns(min(len(_imgs_now), 4))
-            for _ci, (_im, _nm) in enumerate(
-                zip(_imgs_now, st.session_state.messages[-1].get("img_names", []))
-            ):
-                with _cols_now[_ci % 4]:
-                    st.image(_im, caption=_nm, width="stretch")
-        st.markdown(st.session_state.messages[-1]["content"])
 
     try:
         from agent import run_groq_vision, run_literature_search, run_synthesis
@@ -1397,24 +1258,17 @@ if analyze_clicked and st.session_state.images:
         literature = None
         synthesis  = None
 
-        # Spinner avatar signals "AI is working"
-        with st.chat_message("assistant", avatar="spinner"):
-            with st.status("Running 3-stage analysis pipeline...", expanded=True) as status:
-                st.write(f"Stage 1 — Analysing {modality} images...")
+        with st.chat_message("assistant", avatar="⏳"):
+            with st.status("Analyzing...", expanded=True) as status:
+                st.write(f"Reviewing {modality} images...")
                 findings = run_groq_vision(st.session_state.images, question, modality)
-                st.write(f"Stage 1 complete — {len(findings)} chars")
 
-                st.write("Stage 2 — Searching PubMed & PubMed Central...")
+                st.write("Searching medical literature...")
                 literature = run_literature_search(findings, modality)
-                n_pub = len(literature.get("pubmed", []))
-                n_pmc = len(literature.get("pmc", []))
-                n_sch = len(literature.get("scholar", []))
-                st.write(f"Stage 2 complete — {n_pub} PubMed + {n_pmc} PMC + {n_sch} Scholar")
 
-                st.write("Stage 3 — Synthesizing report...")
+                st.write("Generating report...")
                 synthesis = run_synthesis(findings, literature, modality)
-                st.write("Stage 3 complete — report generated")
-                status.update(label="Analysis complete ✓", state="complete", expanded=False)
+                status.update(label="Done", state="complete", expanded=False)
 
         n_papers = (
             len((literature or {}).get("pubmed",  [])) +
@@ -1447,19 +1301,7 @@ if analyze_clicked and st.session_state.images:
 # ══════════════════════════════════════════════════════════════
 #  FOLLOW-UP INPUT
 # ══════════════════════════════════════════════════════════════
-_last_findings = st.session_state.get("last_findings")
-if _last_findings:
-    from vector_store import get_store as _gs
-    _store_count = _gs().count
-    st.markdown(
-        f"<div style='font-size:.75rem;color:#3B82F6;text-align:center;"
-        f"margin:.4rem 0 .2rem;font-weight:500;'>"
-        f"&#9711; RAG active &nbsp;·&nbsp; {_store_count} papers indexed"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-
-user_input = st.chat_input("Ask a follow-up question about this study...")
+user_input = st.chat_input("Ask a follow-up question...")
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
 
@@ -1469,11 +1311,11 @@ if user_input:
 
     last_findings   = st.session_state.get("last_findings")
     last_literature = st.session_state.get("last_literature")
-    last_modality   = st.session_state.get("last_modality", "Echo")
+    last_modality   = st.session_state.get("last_modality", "Echocardiogram")
 
     if last_findings:
         # Spinner avatar while answer is being generated
-        with st.chat_message("assistant", avatar="spinner"):
+        with st.chat_message("assistant", avatar="⏳"):
             with st.spinner("Searching literature and generating response..."):
                 try:
                     from agent import answer_followup
