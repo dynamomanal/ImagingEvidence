@@ -515,6 +515,10 @@ div[data-testid="stAlert"] {
 div[data-testid="stSpinner"] p { color: var(--mu) !important; font-size: 0.87rem !important; }
 div[data-testid="stChatMessage"] img { border-radius: var(--rs); border: 1px solid var(--bd); }
 
+/* Prevent browser pulling viewport down as new content is appended */
+[data-testid="stAppViewContainer"],
+[data-testid="stVerticalBlock"] { overflow-anchor: none; }
+
 /* ── SCROLLBAR ──────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -893,6 +897,11 @@ _components.html("""
                 if (closeBtn) { _sbDispatch(closeBtn); return; }
                 var sb = pd.querySelector('section[data-testid="stSidebar"]');
                 if (sb) { sb.style.transition = 'transform 0.25s ease'; sb.style.transform = 'translateX(-100%)'; }
+                /* show peek strip again after sidebar closes */
+                setTimeout(function() {
+                    var peek = pd.getElementById('sb-peek');
+                    if (peek && par.innerWidth <= 768) peek.style.display = 'flex';
+                }, 300);
             });
         }
         overlay.style.display = visible ? 'block' : 'none';
@@ -963,6 +972,66 @@ _components.html("""
         });
     }
 
+    /* ── mobile peek strip ── */
+    (function() {
+        if (par.innerWidth > 768) return;
+        if (pd.getElementById('sb-peek')) return;
+
+        var strip = pd.createElement('div');
+        strip.id = 'sb-peek';
+        strip.innerHTML =
+            '<div class="peek-icon">&#128247;</div>' +   /* 📷 camera */
+            '<div class="peek-icon">&#128194;</div>' +   /* 📂 folder */
+            '<div class="peek-chevron">&#8250;</div>';   /* › expand */
+
+        var css = pd.createElement('style');
+        css.id = 'sb-peek-style';
+        css.textContent = [
+            '#sb-peek{',
+            '  position:fixed;top:50%;left:0;transform:translateY(-50%);',
+            '  width:44px;z-index:9998;',
+            '  display:flex;flex-direction:column;align-items:center;gap:10px;',
+            '  background:rgba(13,25,48,0.92);',
+            '  border-radius:0 12px 12px 0;',
+            '  padding:14px 0;',
+            '  box-shadow:3px 0 16px rgba(0,0,0,0.45);',
+            '  border-right:1px solid rgba(59,130,246,0.25);',
+            '  border-top:1px solid rgba(59,130,246,0.18);',
+            '  border-bottom:1px solid rgba(59,130,246,0.18);',
+            '  cursor:pointer;transition:opacity .2s;',
+            '}',
+            '#sb-peek .peek-icon{font-size:17px;line-height:1;opacity:.75;}',
+            '#sb-peek .peek-chevron{',
+            '  font-size:22px;font-weight:300;color:#60A5FA;opacity:.9;',
+            '  line-height:1;margin-top:2px;',
+            '}'
+        ].join('');
+        pd.head.appendChild(css);
+        pd.body.appendChild(strip);
+
+        function peekSync() {
+            if (par.innerWidth > 768) { strip.style.display = 'none'; return; }
+            strip.style.display = _sbIsOpen() ? 'none' : 'flex';
+        }
+        peekSync();
+
+        strip.addEventListener('click', function() {
+            var btn = pd.querySelector('[data-testid="stSidebarCollapsedControl"]') ||
+                      pd.querySelector('[data-testid="collapsedControl"]');
+            if (btn) _sbDispatch(btn);
+            else {
+                var sb = pd.querySelector('section[data-testid="stSidebar"]');
+                if (sb) { sb.style.transition = 'transform 0.25s ease'; sb.style.transform = 'translateX(0)'; }
+            }
+            _sbSetOverlay(true);
+            setTimeout(peekSync, 350);
+        });
+
+        if (!par._sbPeekSyncId) {
+            par._sbPeekSyncId = setInterval(peekSync, 200);
+        }
+        par.addEventListener('resize', peekSync);
+    })();
 
     /* ── theme toggle ── */
     function syncIcons(dark) {
@@ -1488,10 +1557,25 @@ else:
     _components.html("""
 <script>
 (function() {
-    setTimeout(function() {
-        var msgs = window.parent.document.querySelectorAll('[data-testid="stChatMessage"]');
-        if (msgs.length > 0) msgs[msgs.length - 1].scrollIntoView({block: 'start'});
-    }, 120);
+    function doScroll() {
+        var pd   = window.parent.document;
+        var msgs = pd.querySelectorAll('[data-testid="stChatMessage"]');
+        if (!msgs.length) return;
+        /* Find the last user message — scroll to its top so the response
+           appears just below, matching Claude-style reading flow */
+        var target = null;
+        for (var i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].querySelector('[data-testid="stChatMessageAvatarUser"]')) {
+                target = msgs[i]; break;
+            }
+        }
+        if (!target) target = msgs[msgs.length - 1];
+        target.scrollIntoView({block: 'start', behavior: 'smooth'});
+    }
+    /* Two passes: first is fast (catches most cases),
+       second overrides any late Streamlit auto-scroll */
+    setTimeout(doScroll, 250);
+    setTimeout(doScroll, 600);
 })();
 </script>
 """, height=0)
