@@ -244,6 +244,22 @@ def _write_feedback(response_text: str, feedback_text: str) -> None:
 
 
 # ══════════════════════════════════════════════════════════════
+#  TYPEWRITER STREAM HELPER
+# ══════════════════════════════════════════════════════════════
+
+def _stream_text(text: str):
+    """Yield text word-by-word at a pace that feels like live typing."""
+    import time
+    words = text.split(" ")
+    n = max(len(words), 1)
+    # Always ~5 s total; min 5 ms / word, max 25 ms / word
+    delay = max(0.005, min(0.025, 5.0 / n))
+    for i, word in enumerate(words):
+        yield word + (" " if i < n - 1 else "")
+        time.sleep(delay)
+
+
+# ══════════════════════════════════════════════════════════════
 #  PAGE CONFIG
 # ══════════════════════════════════════════════════════════════
 
@@ -467,40 +483,43 @@ div[data-testid="stChatMessage"] {
 div[data-testid="stChatMessage"]:last-of-type { border-bottom: none !important; }
 
 /* ── FEEDBACK ROW ────────────────────────────────────── */
-.ie-fb-row {
-    display: flex;
-    align-items: center;
-    gap: .4rem;
-    margin-top: .65rem;
-    padding-top: .55rem;
-    border-top: 1px solid var(--bd2);
+.ie-fb-thanks { font-size: .78rem; color: var(--mu2); }
+/* Compact like/dislike buttons — force them tiny and inline */
+div[data-testid="stChatMessage"] div[data-testid="stHorizontalBlock"]:has(
+    button[title="Helpful"], button[title="Not helpful"]
+) {
+    gap: .2rem !important;
+    margin-top: .55rem !important;
+    padding-top: .5rem !important;
+    border-top: 1px solid var(--bd2) !important;
 }
-.ie-fb-btn {
+div[data-testid="stChatMessage"]
+    div[data-testid="stHorizontalBlock"]:has(button[title="Helpful"], button[title="Not helpful"])
+    div[data-testid="column"] {
+    flex: 0 0 auto !important;
+    min-width: 0 !important;
+    padding: 0 2px 0 0 !important;
+}
+div[data-testid="stChatMessage"] button[title="Helpful"],
+div[data-testid="stChatMessage"] button[title="Not helpful"] {
     background: none !important;
     border: 1px solid transparent !important;
     border-radius: 6px !important;
-    padding: .25rem .4rem !important;
+    padding: .18rem .38rem !important;
     font-size: .9rem !important;
-    cursor: pointer !important;
-    color: var(--mu2) !important;
+    min-height: 0 !important;
+    height: auto !important;
+    width: auto !important;
+    min-width: 0 !important;
     line-height: 1 !important;
+    color: var(--mu2) !important;
     transition: border-color .12s, background .12s !important;
-    min-width: 0 !important; width: auto !important; height: auto !important;
 }
-.ie-fb-btn:hover { border-color: var(--bd) !important; background: var(--s) !important; }
-.ie-fb-btn.active-like  { color: #22C55E !important; border-color: #22C55E55 !important; background: #22C55E10 !important; }
-.ie-fb-btn.active-dislike { color: #EF4444 !important; border-color: #EF444455 !important; background: #EF444410 !important; }
-.ie-fb-row .stTextInput > div { margin-bottom: 0 !important; }
-.ie-fb-row .stTextInput input {
-    font-size: .82rem !important;
-    padding: .3rem .6rem !important;
-    height: 32px !important;
-    border-radius: 6px !important;
-    background: var(--s) !important;
+div[data-testid="stChatMessage"] button[title="Helpful"]:hover,
+div[data-testid="stChatMessage"] button[title="Not helpful"]:hover {
     border-color: var(--bd) !important;
-    color: var(--ink) !important;
+    background: var(--s) !important;
 }
-.ie-fb-thanks { font-size: .78rem; color: var(--mu2); margin-left: .25rem; }
 
 div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
     background: var(--s2) !important;
@@ -1189,17 +1208,53 @@ def _sb_label(text):
 
 with st.sidebar:
 
-    # ── brand ──
+    # ── brand + close button row ──
     st.markdown(
         "<div id='sb-brand' style='padding-bottom:1.1rem;margin-bottom:.6rem;"
-        "border-bottom:1px solid #2E4F7E;'>"
+        "border-bottom:1px solid #2E4F7E;display:flex;align-items:flex-start;"
+        "justify-content:space-between;gap:.5rem;'>"
+        "<div>"
         "<div style='font-size:1.15rem;font-weight:700;color:#E0EEFF;"
         "letter-spacing:-.025em;'>Imaging<span style='color:#3B82F6'>.</span>Evidence</div>"
         "<div id='sb-brand-sub' style='font-size:.72rem;color:#7EAAD4;margin-top:.15rem;'>"
         "Multimodal cardiac imaging AI</div>"
+        "</div>"
+        "<button id='ie-sb-close' title='Close sidebar' "
+        "style='flex-shrink:0;background:rgba(255,255,255,.07);border:1px solid rgba(191,219,254,.18);"
+        "border-radius:7px;color:#BFDBFE;font-size:19px;font-weight:300;line-height:1;"
+        "width:30px;height:30px;cursor:pointer;display:flex;align-items:center;"
+        "justify-content:center;margin-top:1px;'>&times;</button>"
         "</div>",
         unsafe_allow_html=True,
     )
+    # Wire the × button to close the sidebar via parent-document click dispatch
+    _components.html("""
+<script>
+(function() {
+    var pd = window.parent.document;
+    function wireClose() {
+        var btn = pd.getElementById('ie-sb-close');
+        if (!btn || btn._ieWired) return;
+        btn._ieWired = true;
+        btn.addEventListener('click', function() {
+            var closeBtn = pd.querySelector('[data-testid="stSidebarNavCollapseButton"]');
+            if (closeBtn) closeBtn.click();
+            else {
+                var sb = pd.querySelector('section[data-testid="stSidebar"]');
+                if (sb) { sb.style.transition = 'transform .25s ease'; sb.style.transform = 'translateX(-100%)'; }
+            }
+            var ov = pd.getElementById('sb-overlay');
+            if (ov) ov.style.display = 'none';
+            pd.body.style.overflow = '';
+            var pk = pd.getElementById('sb-peek');
+            if (pk) pk.style.display = 'flex';
+        });
+    }
+    wireClose();
+    setTimeout(wireClose, 400);
+})();
+</script>
+""", height=0)
 
     # ── new study ──
     if st.button("+ New study", use_container_width=True):
@@ -1653,35 +1708,32 @@ else:
             # ── like / dislike row (assistant messages only) ──
             if msg["role"] == "assistant":
                 _fb_state = st.session_state.msg_feedback.get(_mi)
-                st.markdown("<div class='ie-fb-row'>", unsafe_allow_html=True)
-                _c1, _c2, _c3 = st.columns([0.05, 0.05, 0.9])
-                with _c1:
-                    _like_cls = "ie-fb-btn active-like" if _fb_state == "liked" else "ie-fb-btn"
-                    if st.button("👍", key=f"like_{_mi}", help="Helpful",
-                                 use_container_width=False):
+                _fc1, _fc2, _fc3 = st.columns([1, 1, 20], gap="small")
+                with _fc1:
+                    if st.button("👍", key=f"like_{_mi}", help="Helpful"):
                         st.session_state.msg_feedback[_mi] = "liked"
                         st.session_state.feedback_open = None
                         st.rerun()
-                with _c2:
-                    _dis_cls = "ie-fb-btn active-dislike" if _fb_state in ("disliked", "submitted") else "ie-fb-btn"
-                    if st.button("👎", key=f"dislike_{_mi}", help="Not helpful",
-                                 use_container_width=False):
+                with _fc2:
+                    if st.button("👎", key=f"dislike_{_mi}", help="Not helpful"):
                         if _fb_state != "submitted":
                             st.session_state.msg_feedback[_mi] = "disliked"
                             st.session_state.feedback_open = _mi
                             st.rerun()
-                with _c3:
+                with _fc3:
                     if _fb_state == "submitted":
                         st.markdown("<span class='ie-fb-thanks'>Thanks for your feedback</span>",
                                     unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
+                    elif _fb_state == "liked":
+                        st.markdown("<span class='ie-fb-thanks'>Glad it helped</span>",
+                                    unsafe_allow_html=True)
 
                 # inline feedback input when this message is open
                 if st.session_state.feedback_open == _mi and _fb_state == "disliked":
                     _fb_input = st.text_input(
-                        "What was wrong with this response?",
+                        "fb",
                         key=f"fb_text_{_mi}",
-                        placeholder="Tell us what could be improved...",
+                        placeholder="What could be improved?",
                         label_visibility="collapsed",
                     )
                     if st.button("Submit feedback", key=f"fb_submit_{_mi}", type="primary"):
@@ -1761,7 +1813,7 @@ if analyze_clicked and st.session_state.images:
         literature = None
         synthesis  = None
 
-        with st.chat_message("assistant", avatar="⏳"):
+        with st.chat_message("assistant", avatar="🫀"):
             _status_label = f"Adding {modality} to study..." if _is_multi else "Analyzing..."
             with st.status(_status_label, expanded=True) as status:
                 _review_msg = (
@@ -1778,22 +1830,39 @@ if analyze_clicked and st.session_state.images:
                 synthesis = run_synthesis(findings, literature, modality)
                 status.update(label="Done", state="complete", expanded=False)
 
-        n_papers = (
-            len((literature or {}).get("pubmed",  [])) +
-            len((literature or {}).get("pmc",     [])) +
-            len((literature or {}).get("scholar", []))
-        )
+            # Scroll to the top of the user message so the response streams from there
+            _components.html("""<script>
+(function() {
+    var pd = window.parent.document;
+    var msgs = pd.querySelectorAll('[data-testid="stChatMessage"]');
+    for (var i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].querySelector('[data-testid="stChatMessageAvatarUser"]')) {
+            msgs[i].scrollIntoView({block: 'start', behavior: 'instant'});
+            break;
+        }
+    }
+})();
+</script>""", height=0)
+
+            n_papers = (
+                len((literature or {}).get("pubmed",  [])) +
+                len((literature or {}).get("pmc",     [])) +
+                len((literature or {}).get("scholar", []))
+            )
+            _full_response = (
+                f"### {modality} Report — {n} image{'s' if n > 1 else ''}\n\n"
+                f"{synthesis}\n\n"
+                f"---\n"
+                f"*Sources: {n_papers} papers retrieved from PubMed · PubMed Central · Semantic Scholar*"
+            )
+            streamed = st.write_stream(_stream_text(_full_response))
+
         st.session_state.last_findings   = findings
         st.session_state.last_literature = literature
         st.session_state.last_modality   = modality
         st.session_state.messages.append({
             "role":    "assistant",
-            "content": (
-                f"### {modality} Report — {n} image{'s' if n > 1 else ''}\n\n"
-                f"{synthesis}\n\n"
-                f"---\n"
-                f"*Sources: {n_papers} papers retrieved from PubMed · PubMed Central · Semantic Scholar*"
-            ),
+            "content": streamed,
         })
 
     except Exception as e:
@@ -1822,9 +1891,9 @@ if user_input:
     last_modality   = st.session_state.get("last_modality", "Echocardiogram")
 
     if last_findings:
-        # Spinner avatar while answer is being generated
-        with st.chat_message("assistant", avatar="⏳"):
-            with st.spinner("Searching literature and generating response..."):
+        with st.chat_message("assistant", avatar="🫀"):
+            # Fetch answer first, then stream it
+            with st.spinner("Thinking..."):
                 try:
                     from agent import answer_followup
                     result = answer_followup(
@@ -1834,14 +1903,26 @@ if user_input:
                         history=st.session_state.messages[:-1],
                         modality=last_modality,
                     )
-                    st.session_state.messages.append({"role": "assistant", "content": result})
                 except Exception as e:
                     import traceback
                     result = f"**Error answering follow-up:** `{e}`\n```\n{traceback.format_exc()}\n```"
-                    st.session_state.messages.append({
-                        "role":    "assistant",
-                        "content": result,
-                    })
+
+            # Scroll to user message, then stream response from there
+            _components.html("""<script>
+(function() {
+    var pd = window.parent.document;
+    var msgs = pd.querySelectorAll('[data-testid="stChatMessage"]');
+    for (var i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].querySelector('[data-testid="stChatMessageAvatarUser"]')) {
+            msgs[i].scrollIntoView({block: 'start', behavior: 'instant'});
+            break;
+        }
+    }
+})();
+</script>""", height=0)
+            streamed = st.write_stream(_stream_text(result))
+
+        st.session_state.messages.append({"role": "assistant", "content": streamed})
     elif st.session_state.images:
         st.session_state.messages.append({
             "role":    "assistant",
