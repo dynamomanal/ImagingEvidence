@@ -905,6 +905,8 @@ _components.html("""
             });
         }
         overlay.style.display = visible ? 'block' : 'none';
+        /* Lock/unlock background scroll while sidebar is open on mobile */
+        pd.body.style.overflow = visible ? 'hidden' : '';
     }
 
     /* ── sidebar auto-open on desktop ── */
