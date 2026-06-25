@@ -213,6 +213,37 @@ def extract_dicom_frames(raw: bytes, n: int) -> tuple:
 
 
 # ══════════════════════════════════════════════════════════════
+#  FEEDBACK WRITER
+# ══════════════════════════════════════════════════════════════
+
+_FEEDBACK_FILE = Path(__file__).parent / "responses.js"
+
+def _write_feedback(response_text: str, feedback_text: str) -> None:
+    import json, datetime
+    entry = {
+        "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+        "response":  response_text[:4000],
+        "feedback":  feedback_text.strip(),
+    }
+    if _FEEDBACK_FILE.exists():
+        raw = _FEEDBACK_FILE.read_text(encoding="utf-8")
+        # Parse existing array between the first [ and last ]
+        start = raw.find("[")
+        end   = raw.rfind("]")
+        if start != -1 and end != -1:
+            inner = raw[start+1:end].strip()
+            existing = json.loads(f"[{inner}]") if inner else []
+        else:
+            existing = []
+    else:
+        existing = []
+    existing.append(entry)
+    lines = [f"  {json.dumps(e, ensure_ascii=False)}" for e in existing]
+    content = "const feedbackResponses = [\n" + ",\n".join(lines) + "\n];\n\nexport default feedbackResponses;\n"
+    _FEEDBACK_FILE.write_text(content, encoding="utf-8")
+
+
+# ══════════════════════════════════════════════════════════════
 #  PAGE CONFIG
 # ══════════════════════════════════════════════════════════════
 
@@ -294,6 +325,25 @@ html, body, [class*="css"], .stApp {
     background: var(--bg) !important;
     color: var(--ink) !important;
     -webkit-font-smoothing: antialiased !important;
+}
+/* Lock background — page itself never scrolls; chat scrolls inside its container */
+html, body { overflow: hidden !important; height: 100% !important; }
+[data-testid="stAppViewContainer"] {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    height: 100vh !important;
+}
+/* Fixed heart watermark — centred, behind all content, never scrolls */
+#ie-heart-bg {
+    position: fixed !important;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 22vw;
+    opacity: .03;
+    pointer-events: none;
+    z-index: 0;
+    user-select: none;
+    line-height: 1;
 }
 /* Remove Streamlit's native header entirely — no space, no padding offset */
 #MainMenu, footer,
@@ -415,6 +465,42 @@ div[data-testid="stChatMessage"] {
     border-bottom: 1px solid var(--bd2) !important;
 }
 div[data-testid="stChatMessage"]:last-of-type { border-bottom: none !important; }
+
+/* ── FEEDBACK ROW ────────────────────────────────────── */
+.ie-fb-row {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin-top: .65rem;
+    padding-top: .55rem;
+    border-top: 1px solid var(--bd2);
+}
+.ie-fb-btn {
+    background: none !important;
+    border: 1px solid transparent !important;
+    border-radius: 6px !important;
+    padding: .25rem .4rem !important;
+    font-size: .9rem !important;
+    cursor: pointer !important;
+    color: var(--mu2) !important;
+    line-height: 1 !important;
+    transition: border-color .12s, background .12s !important;
+    min-width: 0 !important; width: auto !important; height: auto !important;
+}
+.ie-fb-btn:hover { border-color: var(--bd) !important; background: var(--s) !important; }
+.ie-fb-btn.active-like  { color: #22C55E !important; border-color: #22C55E55 !important; background: #22C55E10 !important; }
+.ie-fb-btn.active-dislike { color: #EF4444 !important; border-color: #EF444455 !important; background: #EF444410 !important; }
+.ie-fb-row .stTextInput > div { margin-bottom: 0 !important; }
+.ie-fb-row .stTextInput input {
+    font-size: .82rem !important;
+    padding: .3rem .6rem !important;
+    height: 32px !important;
+    border-radius: 6px !important;
+    background: var(--s) !important;
+    border-color: var(--bd) !important;
+    color: var(--ink) !important;
+}
+.ie-fb-thanks { font-size: .78rem; color: var(--mu2); margin-left: .25rem; }
 
 div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
     background: var(--s2) !important;
@@ -1083,6 +1169,8 @@ _defaults = {
     "last_findings":    None,
     "last_literature":  None,
     "last_modality":    "Echocardiogram",
+    "msg_feedback":     {},   # { msg_index: "liked" | "disliked" | "submitted" }
+    "feedback_open":    None, # msg_index currently showing the feedback input
 }
 for _k, _v in _defaults.items():
     if _k not in st.session_state:
@@ -1120,6 +1208,8 @@ with st.sidebar:
                    "last_findings","last_literature"):
             st.session_state[_k] = [] if isinstance(st.session_state[_k], list) else None
         st.session_state.pop("_cam_fp", None)
+        st.session_state["msg_feedback"]  = {}
+        st.session_state["feedback_open"] = None
         st.rerun()
 
     # ── modality ──
@@ -1516,35 +1606,39 @@ st.markdown(
 #  CHAT / EMPTY STATE
 # ══════════════════════════════════════════════════════════════
 _AVATAR = {
-    "user":      "🧑‍⚕️",
-    "assistant": ":material/ecg_heart:",
+    "user":      "👤",
+    "assistant": "🫀",
 }
 
 if not st.session_state.messages:
-    chips = EMPTY_STATE_CHIPS.get(modality, EMPTY_STATE_CHIPS["Echocardiogram"])
-    st.markdown(
-        "<div class='mobile-empty-state' style='text-align:center;padding:4.5rem 1rem 3rem;'>"
-        f"<div style='font-size:2rem;opacity:.2;margin-bottom:1.2rem;'>{MODALITY_ICONS.get(modality,'🩻')}</div>"
-        "<div style='font-size:1.45rem;font-weight:600;color:var(--ink);"
-        "letter-spacing:-.025em;margin-bottom:.55rem;'>"
-        f"Upload a {modality} study</div>"
-        "<div style='font-size:.9rem;color:var(--mu);max-width:380px;"
-        "margin:0 auto 2.5rem;line-height:1.65;'>"
-        "Upload your imaging files, then tap <strong>Analyze</strong> to generate a clinical report."
-        "</div>"
-        "<div style='display:flex;flex-wrap:wrap;gap:.45rem;"
-        "justify-content:center;max-width:520px;margin:0 auto;'>",
-        unsafe_allow_html=True,
-    )
-    for chip in chips:
-        st.markdown(
-            f"<div style='background:var(--acl);border:1px solid var(--acm);color:var(--ac);"
-            f"padding:.4rem .85rem;border-radius:999px;font-size:.82rem;'>{chip}</div>",
-            unsafe_allow_html=True,
-        )
-    st.markdown("</div></div>", unsafe_allow_html=True)
+    st.markdown("""
+<div id='ie-heart-bg'>🫀</div>
+<div style='text-align:center;padding:5rem 1rem 3rem;position:relative;z-index:1;'>
+  <div style='font-size:.78rem;font-weight:600;letter-spacing:.12em;color:var(--mu2);
+              text-transform:uppercase;margin-bottom:1.1rem;'>Start Study</div>
+  <div style='font-size:1.6rem;font-weight:700;color:var(--ink);letter-spacing:-.03em;
+              margin-bottom:2.2rem;line-height:1.25;'>Upload a cardiac imaging study</div>
+  <div style='display:flex;flex-wrap:wrap;gap:.75rem;justify-content:center;max-width:480px;margin:0 auto;'>
+    <div style='display:flex;align-items:center;gap:.5rem;
+                background:var(--s);border:1px solid var(--bd);border-radius:10px;
+                padding:.65rem 1.1rem;font-size:.88rem;font-weight:500;color:var(--ink2);'>
+      🫀&nbsp;Cardiac Echo
+    </div>
+    <div style='display:flex;align-items:center;gap:.5rem;
+                background:var(--s);border:1px solid var(--bd);border-radius:10px;
+                padding:.65rem 1.1rem;font-size:.88rem;font-weight:500;color:var(--ink2);'>
+      🧲&nbsp;Cardiac MRI
+    </div>
+    <div style='display:flex;align-items:center;gap:.5rem;
+                background:var(--s);border:1px solid var(--bd);border-radius:10px;
+                padding:.65rem 1.1rem;font-size:.88rem;font-weight:500;color:var(--ink2);'>
+      💠&nbsp;Cardiac CT
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 else:
-    for msg in st.session_state.messages:
+    for _mi, msg in enumerate(st.session_state.messages):
         _av = _AVATAR.get(msg["role"], msg["role"])
         with st.chat_message(msg["role"], avatar=_av):
             if "images" in msg and msg["images"]:
@@ -1556,28 +1650,63 @@ else:
 
             st.markdown(msg["content"])
 
+            # ── like / dislike row (assistant messages only) ──
+            if msg["role"] == "assistant":
+                _fb_state = st.session_state.msg_feedback.get(_mi)
+                st.markdown("<div class='ie-fb-row'>", unsafe_allow_html=True)
+                _c1, _c2, _c3 = st.columns([0.05, 0.05, 0.9])
+                with _c1:
+                    _like_cls = "ie-fb-btn active-like" if _fb_state == "liked" else "ie-fb-btn"
+                    if st.button("👍", key=f"like_{_mi}", help="Helpful",
+                                 use_container_width=False):
+                        st.session_state.msg_feedback[_mi] = "liked"
+                        st.session_state.feedback_open = None
+                        st.rerun()
+                with _c2:
+                    _dis_cls = "ie-fb-btn active-dislike" if _fb_state in ("disliked", "submitted") else "ie-fb-btn"
+                    if st.button("👎", key=f"dislike_{_mi}", help="Not helpful",
+                                 use_container_width=False):
+                        if _fb_state != "submitted":
+                            st.session_state.msg_feedback[_mi] = "disliked"
+                            st.session_state.feedback_open = _mi
+                            st.rerun()
+                with _c3:
+                    if _fb_state == "submitted":
+                        st.markdown("<span class='ie-fb-thanks'>Thanks for your feedback</span>",
+                                    unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                # inline feedback input when this message is open
+                if st.session_state.feedback_open == _mi and _fb_state == "disliked":
+                    _fb_input = st.text_input(
+                        "What was wrong with this response?",
+                        key=f"fb_text_{_mi}",
+                        placeholder="Tell us what could be improved...",
+                        label_visibility="collapsed",
+                    )
+                    if st.button("Submit feedback", key=f"fb_submit_{_mi}", type="primary"):
+                        if _fb_input.strip():
+                            _write_feedback(msg["content"], _fb_input)
+                            st.session_state.msg_feedback[_mi] = "submitted"
+                            st.session_state.feedback_open = None
+                            st.rerun()
+
     _components.html("""
 <script>
 (function() {
-    function doScroll() {
-        var pd   = window.parent.document;
-        var msgs = pd.querySelectorAll('[data-testid="stChatMessage"]');
-        if (!msgs.length) return;
-        /* Find the last user message — scroll to its top so the response
-           appears just below, matching Claude-style reading flow */
-        var target = null;
-        for (var i = msgs.length - 1; i >= 0; i--) {
-            if (msgs[i].querySelector('[data-testid="stChatMessageAvatarUser"]')) {
-                target = msgs[i]; break;
-            }
+    /* Scroll the last user message into view (top-aligned, Claude-style).
+       Only runs on follow-up questions — never on first analysis load. */
+    var pd = window.parent.document;
+    var msgs = pd.querySelectorAll('[data-testid="stChatMessage"]');
+    if (msgs.length < 2) return;   /* 1 = just the assistant response; skip first load */
+    var target = null;
+    for (var i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].querySelector('[data-testid="stChatMessageAvatarUser"]')) {
+            target = msgs[i]; break;
         }
-        if (!target) target = msgs[msgs.length - 1];
-        target.scrollIntoView({block: 'start', behavior: 'smooth'});
     }
-    /* Two passes: first is fast (catches most cases),
-       second overrides any late Streamlit auto-scroll */
-    setTimeout(doScroll, 250);
-    setTimeout(doScroll, 600);
+    if (!target) return;
+    setTimeout(function() { target.scrollIntoView({block: 'start', behavior: 'smooth'}); }, 250);
 })();
 </script>
 """, height=0)
