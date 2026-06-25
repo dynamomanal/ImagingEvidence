@@ -661,8 +661,144 @@ div[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
 """, unsafe_allow_html=True)
 
 
-# ── Sidebar toggle JS ──────────────────────────────────────────
+# ── Splash screen ─────────────────────────────────────────────
 import streamlit.components.v1 as _components
+_components.html("""
+<script>
+(function() {
+    var par = window.parent || window;
+    var pd  = par.document;
+
+    if (par.sessionStorage.getItem('ie-splash-seen')) return;
+    if (pd.getElementById('ie-splash')) return;
+
+    var s = pd.createElement('style');
+    s.textContent = [
+        '#ie-splash{position:fixed;inset:0;z-index:999999;display:flex;align-items:center;',
+        'justify-content:center;padding:1.5rem;',
+        'background:radial-gradient(ellipse 80% 60% at 50% 40%,#0F2444 0%,#060D1A 100%);',
+        'animation:ieSplashIn .5s cubic-bezier(.22,.68,0,1.2) both;}',
+
+        '@keyframes ieSplashIn{from{opacity:0}to{opacity:1}}',
+        '@keyframes ieSplashSlide{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}',
+        '@keyframes ieSplashOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(1.04)}}',
+        '@keyframes ieGlow{0%,100%{opacity:.18}50%{opacity:.32}}',
+
+        '#ie-splash-inner{text-align:center;max-width:560px;width:100%;',
+        'animation:ieSplashSlide .7s cubic-bezier(.22,.68,0,1.2) .15s both;}',
+
+        '#ie-splash-glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-58%);',
+        'width:min(680px,90vw);height:min(480px,60vw);border-radius:50%;',
+        'background:radial-gradient(ellipse,rgba(59,130,246,.22) 0%,transparent 70%);',
+        'animation:ieGlow 4s ease-in-out infinite;pointer-events:none;}',
+
+        '.ie-badge{display:inline-flex;align-items:center;gap:.45rem;',
+        'background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);',
+        'color:#60A5FA;font-size:.7rem;font-weight:600;letter-spacing:.1em;',
+        'text-transform:uppercase;padding:.3rem .85rem;border-radius:999px;margin-bottom:1.6rem;}',
+        '.ie-badge-dot{width:6px;height:6px;background:#3B82F6;border-radius:50%;',
+        'box-shadow:0 0 6px #3B82F6;animation:ieGlow 2s ease-in-out infinite;}',
+
+        '.ie-brand{font-size:clamp(2rem,6vw,3rem);font-weight:800;color:#E8F1FF;',
+        'letter-spacing:-.04em;line-height:1;margin-bottom:.5rem;}',
+        '.ie-brand-dot{color:#3B82F6;}',
+
+        '.ie-headline{font-size:clamp(.95rem,2.5vw,1.2rem);font-weight:500;',
+        'color:#93C5FD;margin-bottom:1.4rem;line-height:1.5;}',
+
+        '.ie-body{font-size:clamp(.82rem,2vw,.96rem);color:#7EAAD4;line-height:1.8;',
+        'margin-bottom:.6rem;max-width:480px;margin-left:auto;margin-right:auto;}',
+
+        '.ie-body strong{color:#BFDBFE;}',
+
+        '.ie-body-accent{font-size:clamp(.82rem,2vw,.95rem);color:#93C5FD;font-weight:500;',
+        'margin-bottom:2.2rem;font-style:italic;}',
+
+        '.ie-btn{display:inline-flex;align-items:center;gap:.5rem;',
+        'background:linear-gradient(135deg,#1A56DB,#3B82F6);color:#fff;',
+        'border:none;border-radius:10px;padding:.8rem 2.2rem;',
+        'font-size:1rem;font-weight:600;letter-spacing:-.01em;cursor:pointer;',
+        'box-shadow:0 4px 24px rgba(59,130,246,.35);',
+        'transition:transform .15s,box-shadow .15s;margin-bottom:1.4rem;}',
+        '.ie-btn:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(59,130,246,.45);}',
+        '.ie-btn:active{transform:translateY(0);}',
+
+        '.ie-disclaimer{font-size:.68rem;color:#3D608A;letter-spacing:.03em;}',
+
+        '.ie-divider{width:48px;height:2px;',
+        'background:linear-gradient(90deg,transparent,#1A56DB,transparent);',
+        'margin:1.4rem auto;border-radius:999px;}',
+
+        '.ie-pills{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin-bottom:1.8rem;}',
+        '.ie-pill{background:rgba(26,86,219,.15);border:1px solid rgba(59,130,246,.2);',
+        'color:#60A5FA;font-size:.72rem;padding:.28rem .75rem;border-radius:999px;}',
+    ].join('');
+    pd.head.appendChild(s);
+
+    var el = pd.createElement('div');
+    el.id = 'ie-splash';
+    el.innerHTML = [
+        '<div id="ie-splash-glow"></div>',
+        '<div id="ie-splash-inner">',
+
+        '  <div class="ie-badge">',
+        '    <span class="ie-badge-dot"></span>',
+        '    Research Preview',
+        '  </div>',
+
+        '  <div class="ie-brand">',
+        '    Imaging<span class="ie-brand-dot">.</span>Evidence',
+        '  </div>',
+
+        '  <div class="ie-headline">',
+        '    The first AI built exclusively for cardiac imaging interpretation',
+        '  </div>',
+
+        '  <div class="ie-divider"></div>',
+
+        '  <div class="ie-body">',
+        '    Upload a <strong>DICOM, MRI, CT Scan or Echocardiogram</strong> study.',
+        '    A Vision Language Model reads every frame, cross-references',
+        '    thousands of peer-reviewed cardiology papers in real time via RAG,',
+        '    and returns a fully structured clinical report — in seconds.',
+        '  </div>',
+
+        '  <div class="ie-body-accent">No tool like this has existed before.</div>',
+
+        '  <div class="ie-pills">',
+        '    <span class="ie-pill">Vision Language Model</span>',
+        '    <span class="ie-pill">RAG · PubMed + PMC</span>',
+        '    <span class="ie-pill">DICOM Native</span>',
+        '    <span class="ie-pill">Echo · MRI · CT</span>',
+        '  </div>',
+
+        '  <button class="ie-btn" onclick="ieCloseSplash()">',
+        '    Begin Analysis &nbsp;&#8594;',
+        '  </button>',
+
+        '  <div class="ie-disclaimer">',
+        '    For research and evaluation use &nbsp;·&nbsp; Requires clinician verification',
+        '  </div>',
+
+        '</div>',
+    ].join('');
+    pd.body.appendChild(el);
+
+    par.ieCloseSplash = function() {
+        par.sessionStorage.setItem('ie-splash-seen', '1');
+        var overlay = pd.getElementById('ie-splash');
+        if (!overlay) return;
+        overlay.style.animation = 'ieSplashOut .45s cubic-bezier(.22,.68,0,1.2) forwards';
+        setTimeout(function() {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        }, 460);
+    };
+})();
+</script>
+""", height=0)
+
+
+# ── Sidebar toggle JS ──────────────────────────────────────────
 _components.html("""
 <script>
 (function() {
@@ -1114,11 +1250,77 @@ function finalize(){
 
     st.session_state["flow_selection"] = "Flow A"
 
-    _total_imgs = len(st.session_state.images) + len(st.session_state.cam_images)
-    st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
+    # ── multi-modality context indicator ──
+    _prev_findings = st.session_state.get("last_findings")
+    _prev_modality = st.session_state.get("last_modality", "")
+    _is_adding     = bool(_prev_findings and _prev_modality and _prev_modality != modality)
 
+    if _is_adding:
+        _prev_icon = MODALITY_ICONS.get(_prev_modality, "🩻")
+        _cur_icon  = MODALITY_ICONS.get(modality, "🩻")
+        st.markdown(
+            f"<div style='background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.22);"
+            f"border-radius:8px;padding:.55rem .75rem;margin:.4rem 0 .5rem;'>"
+            f"<div style='font-size:.72rem;font-weight:600;color:#60A5FA;"
+            f"margin-bottom:.25rem;letter-spacing:.01em;'>Multi-modality study</div>"
+            f"<div style='font-size:.75rem;color:#7EAAD4;line-height:1.55;'>"
+            f"{_prev_icon} {_prev_modality} findings will be passed as context "
+            f"to the {_cur_icon} {modality} analysis.</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    # ── study image counter ──
+    _prev_user_msgs = [
+        m for m in st.session_state.messages
+        if m["role"] == "user" and m.get("images")
+    ]
+    _study_analyzed = sum(len(m.get("images", [])) for m in _prev_user_msgs)
+    _cur_batch      = len(st.session_state.images) + len(st.session_state.cam_images)
+    _grand_total    = _study_analyzed + _cur_batch
+
+    if _grand_total > 0:
+        _mod_counts: dict = {}
+        for _m in _prev_user_msgs:
+            _mm = _m.get("modality", "")
+            _mod_counts[_mm] = _mod_counts.get(_mm, 0) + len(_m.get("images", []))
+
+        _rows = "".join(
+            f"<div style='display:flex;justify-content:space-between;align-items:center;"
+            f"font-size:.8rem;color:#B8D4F0;padding:.18rem 0;'>"
+            f"<span>{MODALITY_ICONS.get(_mm,'🩻')} {_mm}</span>"
+            f"<span style='font-weight:600;color:#E0EEFF;'>{_mc}</span></div>"
+            for _mm, _mc in _mod_counts.items()
+        )
+        if _cur_batch > 0:
+            _rows += (
+                f"<div style='display:flex;justify-content:space-between;align-items:center;"
+                f"font-size:.8rem;color:#60A5FA;padding:.18rem 0;'>"
+                f"<span>{MODALITY_ICONS.get(modality,'🩻')} {modality}"
+                f"<span style='font-size:.68rem;margin-left:.35rem;opacity:.75;'>ready</span></span>"
+                f"<span style='font-weight:600;'>{_cur_batch}</span></div>"
+            )
+
+        st.markdown(
+            f"<div style='background:#0D1930;border:1px solid #243F6A;"
+            f"border-radius:8px;padding:.6rem .75rem;margin:.5rem 0;'>"
+            f"<div style='font-size:.67rem;font-weight:600;text-transform:uppercase;"
+            f"letter-spacing:.09em;color:#3D608A;margin-bottom:.38rem;'>Study images</div>"
+            f"{_rows}"
+            f"<div style='border-top:1px solid #1E3055;margin-top:.38rem;padding-top:.38rem;"
+            f"display:flex;justify-content:space-between;font-size:.78rem;"
+            f"color:#BFDBFE;font-weight:600;'>"
+            f"<span>Total</span><span>{_grand_total} image{'s' if _grand_total != 1 else ''}</span>"
+            f"</div></div>",
+            unsafe_allow_html=True,
+        )
+
+    _total_imgs = _cur_batch
+    st.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
+
+    _btn_label = f"Add {modality} to Study" if _is_adding else "Analyze"
     analyze_clicked = st.button(
-        "Analyze",
+        _btn_label,
         use_container_width=True,
         type="primary",
         disabled=_total_imgs == 0,
@@ -1237,18 +1439,39 @@ if analyze_clicked and st.session_state.images:
     n        = len(st.session_state.images)
     modality = st.session_state.modality
 
-    question = (
-        f"Please analyze {'these' if n > 1 else 'this'} {n} {modality} "
-        f"image{'s' if n > 1 else ''} and provide a comprehensive clinical report."
-    )
+    _ctx_findings = st.session_state.get("last_findings")
+    _ctx_modality = st.session_state.get("last_modality", "")
+    _is_multi     = bool(_ctx_findings and _ctx_modality and _ctx_modality != modality)
+
+    if _is_multi:
+        question = (
+            f"This is a multi-modality cardiac study. The patient has already had a "
+            f"{_ctx_modality} study with the following findings:\n\n"
+            f"{_ctx_findings[:2000]}\n\n"
+            f"Now analyze {'these' if n > 1 else 'this'} new {modality} "
+            f"image{'s' if n > 1 else ''}. Cross-reference with the {_ctx_modality} findings above, "
+            f"identify correlating or additional diagnostic information, and provide a "
+            f"comprehensive {modality} report that builds on the multi-modality assessment."
+        )
+        _msg_content = (
+            f"**{n} {modality} image{'s' if n > 1 else ''} added to study** "
+            f"— cross-referencing with {_ctx_modality} findings."
+        )
+    else:
+        question = (
+            f"Please analyze {'these' if n > 1 else 'this'} {n} {modality} "
+            f"image{'s' if n > 1 else ''} and provide a comprehensive clinical report."
+        )
+        _msg_content = f"**{n} {modality} image{'s' if n > 1 else ''} submitted for analysis.**"
 
     st.session_state.history.append({"label": modality, "n": n, "modality": modality})
 
     st.session_state.messages.append({
-        "role":    "user",
-        "content": f"**{n} {modality} image{'s' if n > 1 else ''} submitted for analysis.**",
-        "images":  list(st.session_state.images),
+        "role":      "user",
+        "content":   _msg_content,
+        "images":    list(st.session_state.images),
         "img_names": list(st.session_state.img_names),
+        "modality":  modality,
     })
 
     try:
@@ -1259,8 +1482,13 @@ if analyze_clicked and st.session_state.images:
         synthesis  = None
 
         with st.chat_message("assistant", avatar="⏳"):
-            with st.status("Analyzing...", expanded=True) as status:
-                st.write(f"Reviewing {modality} images...")
+            _status_label = f"Adding {modality} to study..." if _is_multi else "Analyzing..."
+            with st.status(_status_label, expanded=True) as status:
+                _review_msg = (
+                    f"Reviewing {modality} images with {_ctx_modality} context..."
+                    if _is_multi else f"Reviewing {modality} images..."
+                )
+                st.write(_review_msg)
                 findings = run_groq_vision(st.session_state.images, question, modality)
 
                 st.write("Searching medical literature...")
