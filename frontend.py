@@ -953,6 +953,23 @@ _components.html("""
         '    For research and evaluation use &nbsp;·&nbsp; Requires clinician verification',
         '  </div>',
 
+        '  <div class="ie-divider" style="margin-top:1.6rem;"></div>',
+
+        '  <div style="margin-top:.2rem;">',
+        '    <div style="font-size:.65rem;font-weight:600;letter-spacing:.1em;color:#3D608A;text-transform:uppercase;margin-bottom:.65rem;">Also from our team</div>',
+        '    <a href="https://cardio-debate.vercel.app/" target="_blank" rel="noopener noreferrer"',
+        '       style="display:inline-flex;align-items:center;gap:.65rem;text-decoration:none;',
+        '              background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.22);',
+        '              border-radius:12px;padding:.65rem 1.25rem;transition:background .15s,border-color .15s;">',
+        '      <span style="font-size:1.3rem;line-height:1;">💬</span>',
+        '      <span style="text-align:left;">',
+        '        <span style="display:block;font-size:.9rem;font-weight:700;color:#E8F1FF;letter-spacing:-.01em;">Cardio Debate</span>',
+        '        <span style="display:block;font-size:.72rem;color:#7EAAD4;margin-top:.12rem;line-height:1.4;">AI-powered cardiology case discussions &amp; structured debate</span>',
+        '      </span>',
+        '      <span style="color:#60A5FA;font-size:1rem;margin-left:.3rem;opacity:.8;">&#8599;</span>',
+        '    </a>',
+        '  </div>',
+
         '</div>',
     ].join('');
     pd.body.appendChild(el);
@@ -1653,6 +1670,29 @@ st.markdown(
     f"<line x1='18.36' y1='5.64' x2='19.78' y2='4.22'/></svg>"
     f"</button>"
     f"</div></div>",
+    unsafe_allow_html=True,
+)
+
+# ── Cardio Debate banner ───────────────────────────────────────
+st.markdown(
+    "<div style='display:flex;align-items:center;justify-content:space-between;gap:.6rem;"
+    "background:linear-gradient(90deg,rgba(59,130,246,.07) 0%,rgba(99,102,241,.04) 100%);"
+    "border:1px solid rgba(59,130,246,.18);border-radius:10px;"
+    "padding:.5rem .9rem;margin:.75rem 0 .25rem;'>"
+    "<div style='display:flex;align-items:center;gap:.6rem;min-width:0;'>"
+    "<span style='font-size:1.05rem;flex-shrink:0;'>💬</span>"
+    "<div style='min-width:0;'>"
+    "<span style='font-size:.8rem;font-weight:600;color:var(--ink2);'>Cardio Debate</span>"
+    "<span style='font-size:.75rem;color:var(--mu);margin-left:.45rem;'>"
+    "AI-powered cardiology case discussions &amp; structured debate</span>"
+    "</div>"
+    "</div>"
+    "<a href='https://cardio-debate.vercel.app/' target='_blank' rel='noopener noreferrer'"
+    " style='flex-shrink:0;font-size:.72rem;font-weight:600;color:#1A56DB;"
+    " text-decoration:none;white-space:nowrap;padding:.28rem .7rem;"
+    " border:1px solid rgba(26,86,219,.28);border-radius:6px;"
+    " background:rgba(26,86,219,.06);transition:background .12s;'>Try it &#8599;</a>"
+    "</div>",
     unsafe_allow_html=True,
 )
 
